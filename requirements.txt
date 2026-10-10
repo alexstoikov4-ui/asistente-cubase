@@ -1,0 +1,2 @@
+# Única dependencia de ejecución. tkinter, sqlite3, ctypes, winreg, wave y xml vienen con Python para Windows.
+numpy>=1.21

@@ -1,0 +1,147 @@
+{
+  "name": "edm",
+  "label": "EDM comercial",
+  "bpm": [
+    126,
+    130
+  ],
+  "default_bpm": 128,
+  "default_mode": "major",
+  "default_key": "F",
+  "harmonic_rhythm_bars": 1,
+  "sections": [
+    {
+      "name": "Intro",
+      "bars": 8,
+      "energy": 0.4,
+      "roles": [
+        "drums_light",
+        "pad"
+      ]
+    },
+    {
+      "name": "Verso",
+      "bars": 16,
+      "energy": 0.5,
+      "roles": [
+        "drums_light",
+        "bass_light",
+        "pluck"
+      ]
+    },
+    {
+      "name": "Build-up",
+      "bars": 8,
+      "energy": 0.7,
+      "roles": [
+        "drums_build",
+        "chords",
+        "lead_fragment"
+      ]
+    },
+    {
+      "name": "Drop",
+      "bars": 16,
+      "energy": 1.0,
+      "roles": [
+        "drums",
+        "bass",
+        "sub",
+        "lead",
+        "chords",
+        "counter"
+      ]
+    },
+    {
+      "name": "Breakdown",
+      "bars": 8,
+      "energy": 0.3,
+      "roles": [
+        "pad",
+        "lead_soft"
+      ]
+    },
+    {
+      "name": "Build-up 2",
+      "bars": 8,
+      "energy": 0.75,
+      "roles": [
+        "drums_build",
+        "chords",
+        "lead_fragment"
+      ]
+    },
+    {
+      "name": "Drop 2",
+      "bars": 16,
+      "energy": 1.0,
+      "roles": [
+        "drums",
+        "bass",
+        "sub",
+        "lead_climax",
+        "chords",
+        "counter",
+        "arp"
+      ]
+    },
+    {
+      "name": "Outro",
+      "bars": 8,
+      "energy": 0.4,
+      "roles": [
+        "drums_light",
+        "pad"
+      ]
+    }
+  ],
+  "drums": {
+    "kick": "x...x...x...x...",
+    "clap": "....x.......x...",
+    "hat_closed": "..x...x...x...x.",
+    "hat_open": "..............x."
+  },
+  "bass": {
+    "pattern": "..x-..x-..x-..x-",
+    "octave": 2,
+    "gate": 0.9
+  },
+  "chords": {
+    "pattern": "..x-..x-..x-..x-",
+    "low": 55,
+    "high": 76,
+    "voices": 4
+  },
+  "pad": {
+    "low": 52,
+    "high": 79,
+    "voices": 4
+  },
+  "arp": {
+    "type": "up",
+    "rate": 16,
+    "gate": 0.4,
+    "octave": 5
+  },
+  "pluck": {
+    "pattern": "x..x..x.x..x..x.",
+    "octave": 5
+  },
+  "lead": {
+    "octave": 5,
+    "density": 0.6,
+    "syncopation": 0.5,
+    "gate": 0.8,
+    "range": 12
+  },
+  "programs": {
+    "lead": 81,
+    "counter": 82,
+    "chords": 90,
+    "pad": 89,
+    "arp": 81,
+    "bass": 38,
+    "sub": 38,
+    "pluck": 45
+  }
+}

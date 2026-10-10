@@ -1,0 +1,148 @@
+{
+  "name": "melodic_techno",
+  "label": "Melodic techno",
+  "bpm": [
+    120,
+    126
+  ],
+  "default_bpm": 123,
+  "default_mode": "minor",
+  "default_key": "A",
+  "harmonic_rhythm_bars": 4,
+  "sections": [
+    {
+      "name": "Intro",
+      "bars": 16,
+      "energy": 0.35,
+      "roles": [
+        "drums_light",
+        "bass_light"
+      ]
+    },
+    {
+      "name": "Motivo",
+      "bars": 16,
+      "energy": 0.55,
+      "roles": [
+        "drums",
+        "bass",
+        "arp"
+      ]
+    },
+    {
+      "name": "Desarrollo",
+      "bars": 16,
+      "energy": 0.7,
+      "roles": [
+        "drums",
+        "bass",
+        "arp",
+        "pad",
+        "pluck"
+      ]
+    },
+    {
+      "name": "Breakdown",
+      "bars": 16,
+      "energy": 0.3,
+      "roles": [
+        "pad",
+        "lead_soft",
+        "arp"
+      ]
+    },
+    {
+      "name": "Build-up",
+      "bars": 8,
+      "energy": 0.65,
+      "roles": [
+        "drums_build",
+        "arp",
+        "pad"
+      ]
+    },
+    {
+      "name": "Clímax",
+      "bars": 16,
+      "energy": 0.9,
+      "roles": [
+        "drums",
+        "bass",
+        "sub",
+        "lead",
+        "arp",
+        "pad",
+        "counter"
+      ]
+    },
+    {
+      "name": "Outro",
+      "bars": 16,
+      "energy": 0.35,
+      "roles": [
+        "drums_light",
+        "bass_light"
+      ]
+    }
+  ],
+  "drums": {
+    "kick": "x...x...x...x...",
+    "clap": "....x.......x...",
+    "hat_closed": "..x...x...x...x.",
+    "hat_open": "......x.......x.",
+    "ride": "x.x.x.x.x.x.x.x."
+  },
+  "bass": {
+    "pattern": "x.xxx.xxx.xxx.xx",
+    "octave": 2,
+    "gate": 0.45
+  },
+  "chords": {
+    "pattern": "x---------------",
+    "low": 52,
+    "high": 72,
+    "voices": 3
+  },
+  "pad": {
+    "low": 48,
+    "high": 76,
+    "voices": 4
+  },
+  "arp": {
+    "type": "pattern",
+    "steps": [
+      0,
+      2,
+      4,
+      1,
+      3,
+      0,
+      2,
+      4
+    ],
+    "rate": 16,
+    "gate": 0.35,
+    "octave": 4
+  },
+  "pluck": {
+    "pattern": "x..x..x...x.....",
+    "octave": 4
+  },
+  "lead": {
+    "octave": 5,
+    "density": 0.45,
+    "syncopation": 0.5,
+    "gate": 0.9,
+    "range": 10
+  },
+  "programs": {
+    "lead": 81,
+    "counter": 82,
+    "chords": 90,
+    "pad": 89,
+    "arp": 81,
+    "bass": 38,
+    "sub": 38,
+    "pluck": 45
+  }
+}

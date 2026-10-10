@@ -1,0 +1,168 @@
+{
+  "name": "progressive_house",
+  "label": "Progressive house",
+  "bpm": [
+    122,
+    128
+  ],
+  "default_bpm": 126,
+  "default_mode": "minor",
+  "default_key": "A",
+  "harmonic_rhythm_bars": 2,
+  "sections": [
+    {
+      "name": "Intro",
+      "bars": 16,
+      "energy": 0.35,
+      "roles": [
+        "drums_light",
+        "bass_light",
+        "pad"
+      ]
+    },
+    {
+      "name": "Motivo",
+      "bars": 16,
+      "energy": 0.5,
+      "roles": [
+        "drums",
+        "bass",
+        "pluck",
+        "pad"
+      ]
+    },
+    {
+      "name": "Breakdown",
+      "bars": 16,
+      "energy": 0.3,
+      "roles": [
+        "pad",
+        "lead_soft",
+        "counter"
+      ]
+    },
+    {
+      "name": "Build-up",
+      "bars": 8,
+      "energy": 0.65,
+      "roles": [
+        "drums_build",
+        "pad",
+        "lead_fragment",
+        "arp"
+      ]
+    },
+    {
+      "name": "Drop",
+      "bars": 16,
+      "energy": 0.9,
+      "roles": [
+        "drums",
+        "bass",
+        "sub",
+        "lead",
+        "chords",
+        "arp",
+        "counter"
+      ]
+    },
+    {
+      "name": "Desarrollo",
+      "bars": 16,
+      "energy": 0.6,
+      "roles": [
+        "drums",
+        "bass",
+        "sub",
+        "pluck",
+        "pad",
+        "arp"
+      ]
+    },
+    {
+      "name": "Build-up 2",
+      "bars": 8,
+      "energy": 0.7,
+      "roles": [
+        "drums_build",
+        "pad",
+        "lead_fragment",
+        "arp"
+      ]
+    },
+    {
+      "name": "Drop 2",
+      "bars": 16,
+      "energy": 1.0,
+      "roles": [
+        "drums",
+        "bass",
+        "sub",
+        "lead_climax",
+        "chords",
+        "arp",
+        "counter"
+      ]
+    },
+    {
+      "name": "Outro",
+      "bars": 16,
+      "energy": 0.35,
+      "roles": [
+        "drums_light",
+        "bass_light",
+        "pad"
+      ]
+    }
+  ],
+  "drums": {
+    "kick": "x...x...x...x...",
+    "clap": "....x.......x...",
+    "hat_closed": "..x...x...x...x.",
+    "shaker": "xxxxxxxxxxxxxxxx",
+    "hat_open": "..............x."
+  },
+  "bass": {
+    "pattern": "..x...x...x...x.",
+    "octave": 2,
+    "gate": 0.8
+  },
+  "chords": {
+    "pattern": "..x-..x-..x-..x-",
+    "low": 55,
+    "high": 76,
+    "voices": 4
+  },
+  "pad": {
+    "low": 52,
+    "high": 79,
+    "voices": 4
+  },
+  "arp": {
+    "type": "updown",
+    "rate": 16,
+    "gate": 0.5,
+    "octave": 5
+  },
+  "pluck": {
+    "pattern": "x..x..x...x..x..",
+    "octave": 5
+  },
+  "lead": {
+    "octave": 5,
+    "density": 0.55,
+    "syncopation": 0.45,
+    "gate": 0.85,
+    "range": 12
+  },
+  "programs": {
+    "lead": 81,
+    "counter": 82,
+    "chords": 90,
+    "pad": 89,
+    "arp": 81,
+    "bass": 38,
+    "sub": 38,
+    "pluck": 45
+  }
+}
