@@ -143,3 +143,12 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
   a 4x gasta ~2,5 % de un núcleo frente a ~4,6 % antes de optimizar (medido en Linux x86).
 - `test_host` comprueba ahora respuesta en frecuencia, aliasing por factor y Delta.
 - No comparado directamente con StandardCLIP (no disponible aquí): las cifras son medidas propias.
+
+### AIE Clip 1.2: interfaz propia y modos
+- El usuario enseñó StandardCLIP (modos, medidores, curva, historial) y pidió algo de esa calidad.
+- Interfaz propia dibujada por software (800x470): medidores IN/GR/OUT, curva de recorte, historial, menús de
+  modo y sobremuestreo, Ceiling, Delta, Mix. Fondo estático en caché: 1,5 ms por fotograma (Linux x86).
+- Modos: Soft Clip Classic, Soft Clip Pro, Hard Clip, Ratio 2:1. Medidor de reducción alineado con la latencia.
+- Pruebas: `tests_gui.cpp` (ratón, rueda, menús, dibujo extremo, velocidad) y en Windows `test_host` abre la
+  ventana real, hace clic, la captura (debe tener >40 colores) y la cierra dos veces.
+- Pendiente: probar en Cubase 5 real (ventana dentro de Cubase, rendimiento en ARM). Sin presets ni A/B todavía.

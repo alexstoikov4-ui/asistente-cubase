@@ -4,17 +4,34 @@ Plugin VST 2.4 propio, sin el SDK de Steinberg (la interfaz binaria está escrit
 Se compila en GitHub Actions para Windows de 32 bits (Cubase 5) y de 64 bits y se publica en la
 página de descargas como `AIEClip-32bits.dll` / `AIEClip-64bits.dll`.
 
+![Interfaz de AIE Clip](captura.png)
+
+## Interfaz propia (1.2)
+Se dibuja por software (`gui.h`, letras Inter rasterizadas en `gui_font.h` con `tools/gen_font.py`; Inter tiene
+licencia SIL Open Font License 1.1) y en Windows se copia a una ventana hija de la que da Cubase.
+- Medidores de entrada y salida (pico), reducción (GR) y lecturas de pico máximo (clic para reiniciar).
+- Gráfica de la curva de recorte con el nivel actual; historial de salida y reducción.
+- Mandos: arrastrar (Mayúsculas o Ctrl = ajuste fino), doble clic = valor por defecto, rueda del ratón.
+- `tools/preview.cpp` renderiza la interfaz a imagen en Linux; `tests_gui.cpp` prueba ratón, menús y dibujo.
+
 ## Parámetros
 | Parámetro | Rango | Qué hace |
 |---|---|---|
-| Input | -12 … +24 dB | ganancia antes del clipper (empuja la señal contra el techo) |
-| Ceiling | -24 … 0 dB (por defecto -0,3) | techo de salida del clipper |
-| Soft | 0 … 100 % (30 %) | 0 = recorte duro; más = rodilla suave con tanh |
-| OverSmp | 1x, 2x, 4x, 8x, 16x, 32x (4x) | sobremuestreo para reducir el aliasing del recorte |
+| Gain | -12 … +24 dB | ganancia antes del clipper (empuja la señal contra el umbral) |
+| Clip | -24 … 0 dB (por defecto -0,3) | umbral/techo del clipper |
+| Saturación | 0 … 100 % (30 %) | anchura de la rodilla (0 = recorte duro en Classic y Pro) |
+| Modo | Soft Clip Classic, Soft Clip Pro, Hard Clip, Ratio 2:1 | forma de la curva (ver abajo) |
+| Oversampling | x1, x2, x4, x8, x16, x32 (x4) | sobremuestreo para reducir el aliasing del recorte |
 | Output | -24 … +12 dB | ganancia final |
 | Mix | 0 … 100 % | mezcla en paralelo (la señal seca va retrasada igual que la procesada) |
-| Safety | Off/On | recorte duro final al techo para que ningún pico lo supere |
-| Delta | Off/On | escuchar solo lo que el clipper quita (para ajustar Input de oído) |
+| Ceiling | Off/On | recorte duro final al umbral para que ningún pico lo supere |
+| Delta | Off/On | escuchar solo lo que el clipper quita (para ajustar Gain de oído) |
+
+Modos (curvas propias, no copiadas de ningún otro plugin):
+- **Soft Clip Classic**: rodilla tanh; se acerca al techo de forma progresiva (más color).
+- **Soft Clip Pro**: rodilla cuadrática que llega justo al techo (más transparente).
+- **Hard Clip**: recorte duro.
+- **Ratio 2:1**: por encima de la rodilla reduce a la mitad hasta llegar al techo (más suave, tipo compresor).
 
 Latencia: siempre 71 muestras (1,6 ms a 44,1 kHz), también a 1x; se comunica al anfitrión con
 `initialDelay` y Cubase la compensa. Es fija a propósito: cambiar OverSmp durante la reproducción no obliga a

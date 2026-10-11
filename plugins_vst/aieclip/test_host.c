@@ -64,7 +64,7 @@ int main(int argc, char** argv) {
     if (!entry) return 1;
     AEffect* fx = entry(host);
     CHECK(fx && fx->magic == 0x56737450, "AEffect válido ('VstP')");
-    CHECK(fx->numParams == 8 && fx->numInputs == 2 && fx->numOutputs == 2, "8 parámetros, estéreo");
+    CHECK(fx->numParams == 9 && fx->numInputs == 2 && fx->numOutputs == 2, "9 parámetros, estéreo");
     char name[64] = {0};
     fx->dispatcher(fx, 45, 0, 0, name, 0);
     CHECK(strcmp(name, "AIE Clip") == 0, "nombre del efecto");
@@ -207,6 +207,105 @@ int main(int argc, char** argv) {
         CHECK(mx < 1e-3, msg);
         fx->setParameter(fx, 7, 0.0f);
     }
+    /* modos de recorte: con Ceiling activo ningún pico pasa del techo y todos recortan */
+    {
+        const char* names[4] = {"Classic", "Pro", "Hard", "Ratio 2:1"};
+        fx->setParameter(fx, 3, 2 / 5.0f);
+        fx->setParameter(fx, 1, (-6.0f + 24) / 24);
+        fx->setParameter(fx, 2, 0.5f);
+        fx->setParameter(fx, 6, 1.0f);
+        fx->setParameter(fx, 7, 0.0f);
+        for (int i = 0; i < n; i++) inL[i] = inR[i] = 1.2f * sinf(2 * 3.14159265f * 220 * i / 48000.0f);
+        for (int m = 0; m < 4; m++) {
+            fx->setParameter(fx, 8, m / 3.0f);
+            fx->processReplacing(fx, ins, outs, n);
+            double pk = 0, ceil = pow(10, -6 / 20.0);
+            for (int i = 4000; i < n; i++) if (fabs(outL[i]) > pk) pk = fabs(outL[i]);
+            char disp[16];
+            fx->dispatcher(fx, 7, 8, 0, disp, 0);
+            char msg[128];
+            snprintf(msg, sizeof msg, "modo %s (%s): pico %.4f <= techo %.4f", names[m], disp, pk, ceil);
+            CHECK(pk <= ceil + 1e-6 && pk > ceil * 0.9, msg);
+        }
+        fx->setParameter(fx, 8, 0.0f);
+    }
+#if defined(_WIN32)
+    /* ventana del editor como la abre Cubase: tamaño, abrir, clic, captura, cerrar (dos veces) */
+    {
+        typedef struct { short top, left, bottom, right; } ERect;
+        ERect* r = NULL;
+        VstIntPtr ok = fx->dispatcher(fx, 13, 0, 0, &r, 0);
+        char msg[160];
+        CHECK((fx->flags & 1) && ok && r && r->right - r->left == 800 && r->bottom - r->top == 470,
+              "tiene editor propio de 800x470");
+        HWND parent = CreateWindowExA(0, "STATIC", "anfitrion", WS_OVERLAPPEDWINDOW, 0, 0, 900, 600, NULL, NULL,
+                                      GetModuleHandleA(NULL), NULL);
+        for (int rep = 0; rep < 2; rep++) {
+            VstIntPtr o = fx->dispatcher(fx, 14, 0, 0, parent, 0);
+            HWND child = GetWindow(parent, GW_CHILD);
+            CHECK(o == 1 && child != NULL, "abre la ventana del editor");
+            if (!child) break;
+            float d0 = fx->getParameter(fx, 7);
+            SendMessageA(child, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(500, 384)); /* interruptor Delta */
+            SendMessageA(child, WM_LBUTTONUP, 0, MAKELPARAM(500, 384));
+            CHECK((fx->getParameter(fx, 7) >= 0.5f) != (d0 >= 0.5f), "clic en Delta desde la ventana");
+            SendMessageA(child, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(500, 384));
+            SendMessageA(child, WM_LBUTTONUP, 0, MAKELPARAM(500, 384));
+            /* arrastrar el mando Gain */
+            float g0 = fx->getParameter(fx, 0);
+            int ky = 76 + 320 - (int)(g0 * 320);
+            SendMessageA(child, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(118, ky));
+            SendMessageA(child, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(118, ky - 40));
+            SendMessageA(child, WM_LBUTTONUP, 0, MAKELPARAM(118, ky - 40));
+            CHECK(fx->getParameter(fx, 0) > g0 + 0.1f, "arrastrar Gain desde la ventana");
+            fx->setParameter(fx, 0, g0);
+            /* audio y temporizador de la interfaz durante un momento */
+            for (int k = 0; k < 20; k++) {
+                fx->processReplacing(fx, ins, outs, 512);
+                MSG m;
+                while (PeekMessageA(&m, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m); DispatchMessageA(&m); }
+                Sleep(10);
+            }
+            if (rep == 0) {
+                HDC sdc = GetDC(NULL), mdc = CreateCompatibleDC(sdc);
+                HBITMAP bmp = CreateCompatibleBitmap(sdc, 800, 470);
+                HGDIOBJ old = SelectObject(mdc, bmp);
+                PrintWindow(child, mdc, PW_CLIENTONLY);
+                /* contar colores distintos en una rejilla: la interfaz dibujada tiene muchos */
+                int distinct = 0;
+                COLORREF seen[512];
+                for (int y = 5; y < 470 && distinct < 512; y += 9)
+                    for (int x = 5; x < 800 && distinct < 512; x += 9) {
+                        COLORREF c = GetPixel(mdc, x, y);
+                        int found = 0;
+                        for (int q = 0; q < distinct; q++) if (seen[q] == c) { found = 1; break; }
+                        if (!found) seen[distinct++] = c;
+                    }
+                snprintf(msg, sizeof msg, "la interfaz se dibuja en Windows (%d colores distintos en la captura)", distinct);
+                CHECK(distinct > 40, msg);
+                /* guardar la captura (BMP) para el artefacto de la compilación */
+                BITMAPINFO bi; memset(&bi, 0, sizeof bi);
+                bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER); bi.bmiHeader.biWidth = 800; bi.bmiHeader.biHeight = 470;
+                bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 24; bi.bmiHeader.biCompression = BI_RGB;
+                int stride = (800 * 3 + 3) & ~3;
+                unsigned char* bits = (unsigned char*)malloc(stride * 470);
+                GetDIBits(mdc, bmp, 0, 470, bits, &bi, DIB_RGB_COLORS);
+                FILE* f = fopen("editor.bmp", "wb");
+                if (f) {
+                    BITMAPFILEHEADER fh; memset(&fh, 0, sizeof fh);
+                    fh.bfType = 0x4D42; fh.bfOffBits = sizeof fh + sizeof(BITMAPINFOHEADER); fh.bfSize = fh.bfOffBits + stride * 470;
+                    fwrite(&fh, sizeof fh, 1, f); fwrite(&bi.bmiHeader, sizeof(BITMAPINFOHEADER), 1, f); fwrite(bits, stride * 470, 1, f);
+                    fclose(f);
+                }
+                free(bits);
+                SelectObject(mdc, old); DeleteObject(bmp); DeleteDC(mdc); ReleaseDC(NULL, sdc);
+            }
+            fx->dispatcher(fx, 15, 0, 0, NULL, 0);
+            CHECK(GetWindow(parent, GW_CHILD) == NULL, "cierra la ventana del editor");
+        }
+        DestroyWindow(parent);
+    }
+#endif
     fx->dispatcher(fx, 1, 0, 0, NULL, 0);
     printf(fails ? "\n%d pruebas fallidas\n" : "\nTodas las pruebas superadas\n", fails);
     return fails ? 1 : 0;

@@ -53,12 +53,19 @@ jobs:
         working-directory: plugins_vst/aieclip
         run: |
           New-Item -ItemType Directory -Force out32 | Out-Null
-          cl /nologo /O2 /EHsc /MT /LD aieclip.cpp /Foout32\ /link /DEF:aieclip.def /OUT:out32\AIEClip.dll
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aieclip.cpp /Foout32\ /link /DEF:aieclip.def /OUT:out32\AIEClip.dll user32.lib gdi32.lib
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          cl /nologo /O2 /MT test_host.c /Foout32\ /Feout32\test_host.exe
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_gui.cpp /Foout32\ /Feout32\tests_gui.exe /link user32.lib gdi32.lib
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          .\out32\test_host.exe .\out32\AIEClip.dll
+          .\out32\tests_gui.exe
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_host.c /Foout32\ /Feout32\test_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Push-Location out32
+          .\test_host.exe .\AIEClip.dll
+          $rc = $LASTEXITCODE
+          Pop-Location
+          if ($rc -ne 0) { exit 1 }
           New-Item -ItemType Directory -Force ..\..\dist | Out-Null
           Copy-Item out32\AIEClip.dll ..\..\dist\AIEClip-32bits.dll
 
@@ -71,12 +78,19 @@ jobs:
         working-directory: plugins_vst/aieclip
         run: |
           New-Item -ItemType Directory -Force out64 | Out-Null
-          cl /nologo /O2 /EHsc /MT /LD aieclip.cpp /Foout64\ /link /DEF:aieclip.def /OUT:out64\AIEClip.dll
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aieclip.cpp /Foout64\ /link /DEF:aieclip.def /OUT:out64\AIEClip.dll user32.lib gdi32.lib
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          cl /nologo /O2 /MT test_host.c /Foout64\ /Feout64\test_host.exe
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_gui.cpp /Foout64\ /Feout64\tests_gui.exe /link user32.lib gdi32.lib
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          .\out64\test_host.exe .\out64\AIEClip.dll
+          .\out64\tests_gui.exe
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_host.c /Foout64\ /Feout64\test_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Push-Location out64
+          .\test_host.exe .\AIEClip.dll
+          $rc = $LASTEXITCODE
+          Pop-Location
+          if ($rc -ne 0) { exit 1 }
           Copy-Item out64\AIEClip.dll ..\..\dist\AIEClip-64bits.dll
 
       - name: Guardar artefacto
@@ -88,6 +102,7 @@ jobs:
             dist/AIEngineer-consola.exe
             dist/AIEClip-32bits.dll
             dist/AIEClip-64bits.dll
+            plugins_vst/aieclip/out32/editor.bmp
 
       - name: Publicar en la página de descargas (Releases)
         uses: softprops/action-gh-release@v2
