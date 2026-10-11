@@ -50,8 +50,13 @@ def test_downscale_and_coordinate_mapping():
 
 def test_safety_rules(tmp_path):
     d = FakeDesktop(screen(800, 600), title="Correo", process=r"C:\\Windows\\explorer.exe")
+    d.focusable = False  # Cubase no se puede poner delante
+    res = ScreenAgent(d, ScriptedBrain([{"action": "click", "x": 1, "y": 1}]), settle=0, focus_timeout=0.3).run("x")
+    assert res.status == "unsafe" and d.actions == [("focus", "cubase")]  # nunca hace clic fuera de Cubase
+    d = FakeDesktop(screen(800, 600), title="AI Audio Engineer", process=r"C:\\Python\\python.exe")
+    d.on_action = flip_on_action
     res = ScreenAgent(d, ScriptedBrain([{"action": "click", "x": 1, "y": 1}]), settle=0).run("x")
-    assert res.status == "unsafe" and d.actions == []  # nunca hace clic fuera de Cubase
+    assert res.status == "done_by_model" and d.actions[0] == ("focus", "cubase")  # trae Cubase al frente
     d = FakeDesktop(screen(800, 600))
     d._cursor = (0, 0)
     assert ScreenAgent(d, ScriptedBrain([]), settle=0).run("x").status == "stopped"

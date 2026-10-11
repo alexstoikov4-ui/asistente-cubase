@@ -46,7 +46,7 @@ class AgentResult:
 class ScreenAgent:
     def __init__(self, desktop, brain, stop_event=None, *, max_steps: int = 30, settle: float = 0.8,
                  process_filter: str = "cubase", log_dir: Path | None = None, confirm=None, progress=None,
-                 max_width: int = 1280):
+                 max_width: int = 1280, focus_timeout: float = 10.0):
         self.d = desktop
         self.brain = brain
         self.stop = stop_event
@@ -57,6 +57,25 @@ class ScreenAgent:
         self.confirm = confirm or (lambda text: False)
         self.say = progress or (lambda s: None)
         self.max_width = max_width
+        self.focus_timeout = focus_timeout
+
+    def _bring_cubase(self) -> bool:
+        """Al pulsar Ejecutar la ventana activa es la de esta aplicación: se intenta poner Cubase delante
+        y, si Windows no lo permite, se espera a que el usuario lo haga."""
+        if self._in_cubase():
+            return True
+        if hasattr(self.d, "focus_process") and self.d.focus_process(self.process_filter):
+            return True
+        self.say(f"Pon la ventana de Cubase delante: tienes {self.focus_timeout:.0f} segundos.")
+        end = time.time() + self.focus_timeout
+        while time.time() < end:
+            if self.stop is not None and self.stop.is_set():
+                return False
+            if self._in_cubase():
+                time.sleep(0.5)
+                return True
+            time.sleep(0.25)
+        return False
 
     def _in_cubase(self) -> bool:
         proc = (self.d.foreground_process() or "").lower()
@@ -73,6 +92,10 @@ class ScreenAgent:
     def run(self, task: str) -> AgentResult:
         res = AgentResult("failed", "")
         stale = 0
+        if not self._bring_cubase():
+            res.status = "unsafe"
+            res.message = "Cubase no está abierto o no se ha puesto delante: no se hace ningún clic."
+            return res
         for i in range(1, self.max_steps + 1):
             if self.stop is not None and self.stop.is_set():
                 res.status, res.message = "stopped", "Detenido por el usuario."

@@ -129,6 +129,19 @@ class WindowsDesktop:
         finally:
             k32.CloseHandle(h)
 
+    def focus_process(self, name: str) -> bool:
+        """Trae al frente la ventana principal del programa indicado (p.ej. Cubase). True si lo consigue."""
+        from ..cubase.detect import detect
+        st = detect()
+        if not st.running or not st.hwnd or name.lower() not in (st.exe_path or st.window_title).lower():
+            return False
+        h = self.ct.c_void_p(st.hwnd)
+        if self.user32.IsIconic(h):
+            self.user32.ShowWindow(h, 9)  # restaurar solo si está minimizada (no quitar el maximizado)
+        self.user32.SetForegroundWindow(h)
+        time.sleep(0.4)
+        return name.lower() in self.foreground_process().lower()
+
     # ------------------------------------------------------------ entrada
     def _mouse(self, flags: int, data: int = 0):
         MI = self._U._fields_[0][1]
@@ -220,6 +233,13 @@ class FakeDesktop:
 
     def foreground_process(self):
         return self.process
+
+    def focus_process(self, name):
+        self.actions.append(("focus", name))
+        if getattr(self, "focusable", True):
+            self.process = r"C:\Program Files (x86)\Steinberg\Cubase 5\Cubase5.exe"
+            self.title = "Cubase 5 Project - Prueba"
+        return name.lower() in self.process.lower()
 
     def _do(self, *a):
         self.actions.append(a)
