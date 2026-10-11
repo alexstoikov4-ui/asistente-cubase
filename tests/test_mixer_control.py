@@ -88,3 +88,12 @@ def test_without_loopmidi_explains(tmp_path):
     eng.set_mode("autonomous")
     t = eng.run(eng.interpret("Sube el bajo 2 dB"))[0]
     assert t.status == "skipped" and "loopMIDI" in t.result["summary"]
+
+
+def test_change_volume_without_display_uses_fader_position(tmp_path):
+    cub, m = make(show_values=False, tmp_path=tmp_path)
+    cub.to_surface.send(bytes([0xE0, 0x00, 0x6C]))  # Cubase informa de la posición del fader 1
+    m.s.poll(0.05)
+    r = m.change_volume(1, 3.0)
+    assert r.status == "unverified" and "movido" in r.message
+    assert cub.tracks[0].db > -999

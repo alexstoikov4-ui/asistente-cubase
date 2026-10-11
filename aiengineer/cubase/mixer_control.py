@@ -67,6 +67,15 @@ class MixerControl:
                 return int(round(p0 + (p1 - p0) * (db - d0) / (d1 - d0 or 1e-9)))
         return c[-1][0]
 
+    def db_for_pos(self, pos: int) -> float:
+        c = self.curve
+        if pos <= c[0][0]:
+            return c[0][1]
+        for (p0, d0), (p1, d1) in zip(c, c[1:]):
+            if p0 <= pos <= p1:
+                return d0 + (d1 - d0) * (pos - p0) / ((p1 - p0) or 1)
+        return c[-1][1]
+
     # ------------------------------------------------------------ pistas
     def connect(self) -> Result:
         if self.s.wake():
@@ -163,9 +172,27 @@ class MixerControl:
         self.s.poll(0.3)
         cur = self.read_db(strip)
         self.s.release_fader(strip)
-        if cur is None or not math.isfinite(cur):
-            return Result("failed", f"No se pudo leer el volumen actual de la pista {track} en la pantalla de Cubase.")
-        return self.set_volume(track, cur + delta_db)
+        if cur is not None and math.isfinite(cur):
+            return self.set_volume(track, cur + delta_db)
+        # Sin texto en pantalla: se usa la posición del fader que Cubase devuelve a la superficie
+        pos = self.s.state.faders.get(strip)
+        if pos is None:
+            self.s.wake(attempts=1)
+            pos = self.s.state.faders.get(strip)
+        if pos is None:
+            return Result("failed", f"No se pudo leer ni el valor ni la posición del fader de la pista {track}.")
+        est = self.db_for_pos(pos)
+        target = self.pos_for_db(est + delta_db)
+        self.s.fader(strip, target, touch=True)
+        time.sleep(self.settle)
+        self.s.poll(0.3)
+        self.s.release_fader(strip)
+        back = self.s.state.faders.get(strip)
+        landed = back is not None and abs(back - target) <= 64
+        return Result("unverified", f"Pista {track}: fader movido unos {delta_db:+.1f} dB (estimado con la curva del "
+                                    f"fader, de ~{est:.1f} a ~{est + delta_db:.1f} dB"
+                                    f"{'; Cubase confirma la nueva posición' if landed else ''}). Cubase no envía el "
+                                    "valor exacto en dB, así que no se puede verificar al décimo.")
 
     # ------------------------------------------------------------ mute / solo
     def set_button(self, kind: str, track: int, on: bool) -> Result:
