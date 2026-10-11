@@ -380,12 +380,18 @@ def screen_task(engine, params) -> dict:
         desktop = engine.context.get("_desktop") or WindowsDesktop()
     except DesktopUnavailable as e:
         return result("skipped", str(e))
+    from ..screen.quick import run_quick
+    quick = run_quick(desktop, engine.cubase.keymap, params["task"])
+    if quick:  # orden sencilla: atajo de Cubase, sin modelo de visión
+        return result(quick[0], quick[1])
     brain = engine.context.get("_brain")
     if brain is None:
         models = OllamaBrain.available_models(st.ollama_url)
         if not models:
-            return result("skipped", "Ollama no está en marcha o no tiene modelos. Instala Ollama (gratis) y un modelo "
-                                     "de visión, p.ej. 'ollama pull qwen2.5vl:7b', y elígelo en 'Control de pantalla'.")
+            return result("skipped", "Esta tarea necesita 'ver' la pantalla y para eso hace falta Ollama (gratis) con un "
+                                     "modelo de visión: instala Ollama desde ollama.com, ejecuta 'ollama pull qwen2.5vl:7b' "
+                                     "y elígelo en la pestaña 'Control de pantalla'. Las órdenes sencillas (abrir el "
+                                     "mezclador, play/stop, guardar, deshacer) funcionan sin Ollama.")
         model = st.vision_model if st.vision_model in models else None
         if model is None:
             return result("skipped", "Elige un modelo de visión en la pestaña 'Control de pantalla'. Instalados: "

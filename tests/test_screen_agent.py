@@ -123,3 +123,26 @@ def test_ollama_brain_and_engine_integration(tmp_path):
     finally:
         srv.shutdown()
     assert OllamaBrain.available_models("http://127.0.0.1:1") == []
+
+
+def test_quick_commands_without_ollama(tmp_path):
+    from aiengineer.cubase.keycommands import KeyMap
+    from aiengineer.screen.quick import match_quick, run_quick
+    assert match_quick("abre el mezclador de cubase")[1] == "mezclador"
+    assert match_quick("inserta pro-q 3 en el bajo") is None
+    d = FakeDesktop(screen(800, 600), title="AI Audio Engineer", process=r"C:\\Python\\python.exe")
+    d.on_action = flip_on_action
+    st, msg = run_quick(d, KeyMap({}), "Abre el mezclador", settle=0)
+    assert st == "verified" and ("key", "f3") in d.actions and d.actions[0] == ("focus", "cubase")
+    d2 = FakeDesktop(screen(800, 600))
+    st, _ = run_quick(d2, KeyMap({("Devices", "Mixer"): ["Ctrl+M"]}), "abre el mezclador", settle=0)
+    assert st == "unverified" and ("key", "ctrl+m") in d2.actions  # usa el atajo del usuario
+    # integración: la orden en español no necesita Ollama
+    eng = Engine(tmp_path / "home")
+    eng.open_project("Q", create=True)
+    eng.set_mode("autonomous")
+    d3 = FakeDesktop(screen(800, 600))
+    d3.on_action = flip_on_action
+    eng.context["_desktop"] = d3
+    t = eng.run(eng.interpret("Abre el mezclador de Cubase"))[0]
+    assert t.status == "verified" and "mezclador" in t.result["summary"]

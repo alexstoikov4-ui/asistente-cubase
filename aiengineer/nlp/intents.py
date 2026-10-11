@@ -41,7 +41,8 @@ RULES: list[tuple[str, list[str]]] = [
     ("feedback", [r"\bha perdido\b", r"\bdemasiad[oa]s?\b.*\b(pegada|grave|brillo|comprimid|ancho|reverb)",
                   r"\bsigue siendo\b", r"\bsuena (demasiado|muy|poco)\b", r"\bme gusta\b", r"\bno me gusta\b",
                   r"\bquiero mas\b.*\by menos\b", r"\bmenos sensacion\b"]),
-    ("screen_task", [r"^en cubase\b", r"\b(haz clic|pulsa el boton|abre el (mezclador|menu)|cierra la ventana)\b",
+    ("screen_task", [r"^en cubase\b", r"\b(abre|abrir|muestra|cierra)\b.{0,20}\b(mezclador|mixer|panel de transporte|"
+                     r"conexiones vst|instrumentos vst)\b", r"\b(dale al play|reproduce el proyecto|para la reproduccion)\b", r"\b(haz clic|pulsa el boton|abre el (mezclador|menu)|cierra la ventana)\b",
                      r"\b(inserta|carga|pon|abre|ajusta|mueve|selecciona|activa|desactiva)\b.{0,40}\b(plugin|pro-?q|saturn|"
                      r"limiter|waves|mezclador|fader|insert|ranura|canal|ventana|envio|eq de cubase)\b"]),
     ("cubase_status", [r"\b(estado|esta abierto|detecta).{0,20}cubase\b", r"\bcubase\b.{0,20}\b(abierto|estado)\b"]),

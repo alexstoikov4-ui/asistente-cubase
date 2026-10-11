@@ -29,6 +29,8 @@ def key_codes(combo: str) -> list[int]:
             codes.append(SPECIAL_KEYS[part])
         elif len(part) == 1 and part.isalnum():
             codes.append(ord(part.upper()))
+        elif part.startswith("num") and part[3:].isdigit():
+            codes.append(0x60 + int(part[3:]))  # teclado numérico
         else:
             raise ValueError(f"tecla no reconocida: {part!r}")
     return codes

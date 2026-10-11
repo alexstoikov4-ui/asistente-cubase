@@ -19,6 +19,10 @@ DEFAULTS = {
     ("Transport", "Start/Stop"): "Space",
     ("Edit", "Undo"): "Ctrl+Z",
     ("Devices", "Mixer"): "F3",
+    ("Devices", "Transport Panel"): "F2",
+    ("Devices", "VST Connections"): "F4",
+    ("Devices", "VST Instruments"): "F11",
+    ("Edit", "Redo"): "Ctrl+Shift+Z",
 }
 
 
