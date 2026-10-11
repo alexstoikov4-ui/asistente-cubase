@@ -270,7 +270,8 @@ int main(int argc, char** argv) {
                 HDC sdc = GetDC(NULL), mdc = CreateCompatibleDC(sdc);
                 HBITMAP bmp = CreateCompatibleBitmap(sdc, 800, 470);
                 HGDIOBJ old = SelectObject(mdc, bmp);
-                PrintWindow(child, mdc, PW_CLIENTONLY);
+                /* la ventana de prueba está oculta: se le pide que se pinte en nuestro contexto */
+                SendMessageA(child, WM_PRINTCLIENT, (WPARAM)mdc, PRF_CLIENT);
                 /* contar colores distintos en una rejilla: la interfaz dibujada tiene muchos */
                 int distinct = 0;
                 COLORREF seen[512];
