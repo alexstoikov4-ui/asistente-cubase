@@ -16,7 +16,19 @@ def _approve_cli(task) -> bool:
     return ans in ("s", "si", "sí", "y", "yes")
 
 
+def _utf8_console() -> None:
+    """La consola de Windows usa cp1252 por defecto: sin esto, caracteres como '→' o '✔' rompen la salida.
+    En el ejecutable sin consola sys.stdout es None y no hay nada que configurar."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv=None) -> int:
+    _utf8_console()
     ap = argparse.ArgumentParser(prog="aiengineer", description="AI Audio Engineer para Cubase 5")
     ap.add_argument("--home", help="carpeta de datos (por defecto %%APPDATA%%\\AIEngineer)")
     ap.add_argument("--project", help="proyecto a abrir/crear")
