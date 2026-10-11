@@ -1,13 +1,13 @@
 """Genera gui_font.h: fuentes Inter rasterizadas (alfa de 8 bits) para la interfaz de AIE Clip.
 
-Uso: python tools/gen_font.py  (necesita Pillow y la fuente Inter instalada; Inter: SIL Open Font License 1.1)
+Uso: python plugins_vst/common/gen_font.py  (necesita Pillow y la fuente Inter instalada; Inter: SIL Open Font License 1.1)
 """
 import os
 import sys
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "..", "gui_font.h")
+OUT = os.path.join(HERE, "gui_font.h")
 CANDIDATES = ["/usr/share/fonts/opentype/inter", "/usr/share/fonts/truetype/inter", "C:/Windows/Fonts"]
 FONTS = [  # (nombre en C, archivo, tamaño en píxeles)
     ("kFontSmall", "Inter-Medium.otf", 10),

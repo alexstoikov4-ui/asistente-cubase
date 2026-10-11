@@ -69,6 +69,22 @@ jobs:
           New-Item -ItemType Directory -Force ..\..\dist | Out-Null
           Copy-Item out32\AIEClip.dll ..\..\dist\AIEClip-32bits.dll
 
+      - name: Compilar y probar el plugin AIE Scope de 32 bits
+        working-directory: plugins_vst/aiescope
+        run: |
+          New-Item -ItemType Directory -Force out32 | Out-Null
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aiescope.cpp /Foout32\ /link /DEF:aiescope.def /OUT:out32\AIEScope.dll user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_scope.cpp /Foout32\ /Feout32\tests_scope.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out32\tests_scope.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_scope_host.c /Foout32\ /Feout32\test_scope_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out32\test_scope_host.exe .\out32\AIEScope.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item out32\AIEScope.dll ..\..\dist\AIEScope-32bits.dll
+
       - name: Preparar compilador de C++ (64 bits)
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -93,6 +109,22 @@ jobs:
           if ($rc -ne 0) { exit 1 }
           Copy-Item out64\AIEClip.dll ..\..\dist\AIEClip-64bits.dll
 
+      - name: Compilar y probar el plugin AIE Scope de 64 bits
+        working-directory: plugins_vst/aiescope
+        run: |
+          New-Item -ItemType Directory -Force out64 | Out-Null
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aiescope.cpp /Foout64\ /link /DEF:aiescope.def /OUT:out64\AIEScope.dll user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_scope.cpp /Foout64\ /Feout64\tests_scope.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out64\tests_scope.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_scope_host.c /Foout64\ /Feout64\test_scope_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out64\test_scope_host.exe .\out64\AIEScope.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item out64\AIEScope.dll ..\..\dist\AIEScope-64bits.dll
+
       - name: Guardar artefacto
         uses: actions/upload-artifact@v4
         with:
@@ -102,6 +134,8 @@ jobs:
             dist/AIEngineer-consola.exe
             dist/AIEClip-32bits.dll
             dist/AIEClip-64bits.dll
+            dist/AIEScope-32bits.dll
+            dist/AIEScope-64bits.dll
             plugins_vst/aieclip/out32/editor.bmp
 
       - name: Publicar en la página de descargas (Releases)
@@ -117,9 +151,13 @@ jobs:
             `AIEngineer-consola.exe` es la versión de línea de comandos (opcional).
             **AIEClip-32bits.dll**: plugin clipper VST para Cubase 5 de 32 bits (cópialo a la carpeta VSTPlugins
             de Cubase, renómbralo a AIEClip.dll y reinicia Cubase). `AIEClip-64bits.dll` es para DAWs de 64 bits.
+            **AIEScope-32bits.dll**: onda en color por bandas (graves rojo, medios verde, agudos azul); se instala igual
+            con el nombre AIEScope.dll.
             Compilado automáticamente desde el commit ${{ github.sha }}.
           files: |
             dist/AIEngineer.exe
             dist/AIEngineer-consola.exe
             dist/AIEClip-32bits.dll
             dist/AIEClip-64bits.dll
+            dist/AIEScope-32bits.dll
+            dist/AIEScope-64bits.dll

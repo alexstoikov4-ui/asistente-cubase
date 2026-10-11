@@ -152,3 +152,10 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
 - Pruebas: `tests_gui.cpp` (ratón, rueda, menús, dibujo extremo, velocidad) y en Windows `test_host` abre la
   ventana real, hace clic, la captura (debe tener >40 colores) y la cierra dos veces.
 - Pendiente: probar en Cubase 5 real (ventana dentro de Cubase, rendimiento en ARM). Sin presets ni A/B todavía.
+
+### AIE Scope 1.0: onda por bandas
+- Petición del usuario (foto de Traktor): ver la onda con graves en rojo, medios en verde y agudos en azul.
+- Plugin de análisis sin latencia que no toca el sonido; bandas con Linkwitz-Riley 4.º orden (200 Hz, 2,5 kHz);
+  vistas Color y 3 bandas, zoom 2–16 s, Gain, Freeze, resumen de 64 s y medidores por banda.
+- Código común en `plugins_vst/common/` (lienzo, letras, VST2 mínimo, ventana de Windows reutilizable).
+- Pendiente: probarlo en Cubase 5 real.

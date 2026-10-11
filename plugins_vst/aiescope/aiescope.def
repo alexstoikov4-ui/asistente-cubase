@@ -1,0 +1,4 @@
+LIBRARY AIEScope
+EXPORTS
+    VSTPluginMain
+    main=VSTPluginMain
