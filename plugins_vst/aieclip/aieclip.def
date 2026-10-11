@@ -1,0 +1,4 @@
+LIBRARY AIEClip
+EXPORTS
+    VSTPluginMain
+    main=VSTPluginMain

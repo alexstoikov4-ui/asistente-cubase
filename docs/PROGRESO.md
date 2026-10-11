@@ -108,3 +108,18 @@ la captura según los errores observados.
 
 ### Siguiente paso
 EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN) para aplicar EQ y compresión.
+
+## Sesión 4 — 2026-10-11: plugin clipper propio (AIE Clip)
+
+### Implementado
+- `plugins_vst/aieclip/`: clipper VST 2.4 estilo StandardCLIP escrito en C++ sin SDK (Input, Ceiling, Soft,
+  OverSmp 1x–16x con filtro polifásico Kaiser, Output, Mix con señal seca alineada, Safety). Latencia
+  declarada a Cubase: 0 / 15 muestras.
+- `test_host.c`: anfitrión de pruebas. Verificado en Linux: ningún pico supera el techo en ningún factor de
+  sobremuestreo; por debajo del techo la salida es idéntica a la entrada retrasada 15 muestras
+  (error < 0,0001), también con Mix al 50 % (sin filtro peine).
+- GitHub Actions compila las versiones de 32 y 64 bits con MSVC, ejecuta `test_host` con cada una y las publica.
+
+### Por verificar en el equipo real
+- Que Cubase 5 de 32 bits (emulado en ARM) cargue `AIEClip.dll` y lo muestre en los insertos.
+- No tiene interfaz gráfica propia todavía: Cubase muestra sus deslizadores genéricos.

@@ -44,6 +44,41 @@ jobs:
           .\dist\AIEngineer-consola.exe --home "$env:RUNNER_TEMP\aie2" status
           .\dist\AIEngineer-consola.exe --home "$env:RUNNER_TEMP\aie2" --project Prueba do "Compón un drop progressive house con una melodía emotiva" --yes
 
+      - name: Preparar compilador de C++ (32 bits, para Cubase 5)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Compilar y probar el plugin AIE Clip de 32 bits
+        working-directory: plugins_vst/aieclip
+        run: |
+          New-Item -ItemType Directory -Force out32 | Out-Null
+          cl /nologo /O2 /EHsc /MT /LD aieclip.cpp /Foout32\ /link /DEF:aieclip.def /OUT:out32\AIEClip.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT test_host.c /Foout32\ /Feout32\test_host.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out32\test_host.exe .\out32\AIEClip.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          New-Item -ItemType Directory -Force ..\..\dist | Out-Null
+          Copy-Item out32\AIEClip.dll ..\..\dist\AIEClip-32bits.dll
+
+      - name: Preparar compilador de C++ (64 bits)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Compilar y probar el plugin AIE Clip de 64 bits
+        working-directory: plugins_vst/aieclip
+        run: |
+          New-Item -ItemType Directory -Force out64 | Out-Null
+          cl /nologo /O2 /EHsc /MT /LD aieclip.cpp /Foout64\ /link /DEF:aieclip.def /OUT:out64\AIEClip.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT test_host.c /Foout64\ /Feout64\test_host.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out64\test_host.exe .\out64\AIEClip.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item out64\AIEClip.dll ..\..\dist\AIEClip-64bits.dll
+
       - name: Guardar artefacto
         uses: actions/upload-artifact@v4
         with:
@@ -51,6 +86,8 @@ jobs:
           path: |
             dist/AIEngineer.exe
             dist/AIEngineer-consola.exe
+            dist/AIEClip-32bits.dll
+            dist/AIEClip-64bits.dll
 
       - name: Publicar en la página de descargas (Releases)
         uses: softprops/action-gh-release@v2
@@ -63,7 +100,11 @@ jobs:
             Descarga **AIEngineer.exe** y ábrelo con doble clic (no necesita instalar Python).
             Si Windows muestra "Windows protegió su PC": Más información → Ejecutar de todas formas.
             `AIEngineer-consola.exe` es la versión de línea de comandos (opcional).
+            **AIEClip-32bits.dll**: plugin clipper VST para Cubase 5 de 32 bits (cópialo a la carpeta VSTPlugins
+            de Cubase, renómbralo a AIEClip.dll y reinicia Cubase). `AIEClip-64bits.dll` es para DAWs de 64 bits.
             Compilado automáticamente desde el commit ${{ github.sha }}.
           files: |
             dist/AIEngineer.exe
             dist/AIEngineer-consola.exe
+            dist/AIEClip-32bits.dll
+            dist/AIEClip-64bits.dll
