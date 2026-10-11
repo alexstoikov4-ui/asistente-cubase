@@ -202,8 +202,7 @@ def diagnose(out_name: str, in_name: str, listen_seconds: float = 6.0, say=None)
         # 1) bucle: escribir en la salida del MISMO puerto de entrada y comprobar que llega
         try:
             loop_out = WinMidiOut(in_name)
-            loop_out.send(bytes([0x90, 0x7F, 0x01]))
-            loop_out.send(bytes([0x80, 0x7F, 0x00]))
+            # solo SysEx de uso no comercial (0x7D): no suena aunque Cubase escuche ese puerto
             loop_out.send(bytes([0xF0, 0x7D, 0x41, 0x49, 0x45, 0xF7]))
             got, sysex = 0, False
             end = time.time() + 1.5
@@ -214,8 +213,7 @@ def diagnose(out_name: str, in_name: str, listen_seconds: float = 6.0, say=None)
                     sysex = sysex or m[:1] == b"\xf0"
             loop_out.close()
             if got:
-                lines.append(f"✔ Prueba de bucle: la aplicación recibe MIDI por '{inp.name}' ({got} mensajes"
-                             f"{', incluido SysEx' if sysex else ', pero NO llegan los SysEx'}).")
+                lines.append(f"✔ Prueba de bucle: la aplicación recibe SysEx por '{inp.name}' ({got} mensajes).")
             else:
                 lines.append(f"✖ Prueba de bucle: lo enviado a '{in_name}' no vuelve por su entrada. El puerto "
                              "virtual no funciona como bucle para esta aplicación.")

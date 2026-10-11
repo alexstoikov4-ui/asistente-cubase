@@ -286,6 +286,8 @@ class App:
                  "  1. Instala loopMIDI (gratis, tobias-erichsen.de) y crea dos puertos: 'AIE a Cubase' y 'Cubase a AIE'.\n"
                  "  2. En Cubase: Dispositivos > Configuración de dispositivos > botón + > Mackie Control.\n"
                  "     Entrada MIDI = 'AIE a Cubase', Salida MIDI = 'Cubase a AIE'. Aceptar.\n"
+                 "     En 'Configuración de puertos MIDI', desmarca \"En 'Todas las entradas MIDI'\" para esos puertos\n"
+                 "     (si no, las notas de control de Mackie llegan a tus instrumentos y suenan).\n"
                  "  3. Aquí: elige los puertos y pulsa 'Conectar y probar'.\n"
                  "Después puedes ordenar: «Sube el bajo 2 dB», «Pon el kick a -6 dB», «Silencia el pad», "
                  "«Panea los hats 30 a la derecha», «Aplica los niveles del plan de mezcla en Cubase».")
