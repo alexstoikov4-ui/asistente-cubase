@@ -97,6 +97,7 @@ def mix_plan(engine, params) -> dict:
     p_md = _out(engine, "plan_mezcla.md")
     p_md.write_text(md, encoding="utf-8")
     p_json = _save_json(engine, "plan_mezcla.json", {k: v for k, v in plan.items() if k != "_preview"})
+    engine.context["last_mix_plan"] = {"stems": [{"name": s["name"], "gain_db": s["gain_db"]} for s in plan["stems"]]}
     arts = [str(p_md), p_json]
     prev = write_preview(plan, _out(engine, "previsualizacion_mezcla.wav"))
     status = "done"
@@ -370,6 +371,83 @@ def list_restore_points(engine, params) -> dict:
     return result("done", "\n".join(lines))
 
 
+def _get_mixer(engine):
+    from ..cubase.midi_ports import MidiUnavailable
+    try:
+        m = engine.mixer()
+    except MidiUnavailable as e:
+        return None, result("skipped", f"{e}\nPara controlar el mezclador hace falta loopMIDI (gratis) con dos puertos "
+                                       "('AIE a Cubase' y 'Cubase a AIE') y activar Mackie Control en Cubase. Guía en la "
+                                       "pestaña 'Mezclador (MIDI)'.")
+    except OSError as e:
+        return None, result("skipped", f"No se pudo abrir el MIDI: {e}")
+    return m, None
+
+
+def _resolve_track(mixer, target: str):
+    if target.isdigit():
+        return int(target)
+    return mixer.find_track(target)
+
+
+def mixer_control(engine, params) -> dict:
+    """Ajustes exactos en el mezclador de Cubase vía Mackie Control, verificados con la respuesta de Cubase."""
+    from ..nlp.mixer_commands import parse_mixer
+    cmd = parse_mixer(params["text"])
+    if cmd is None:
+        return result("failed", "No he entendido el ajuste de mezclador.")
+    m, err = _get_mixer(engine)
+    if err:
+        return err
+    track = _resolve_track(m, cmd.target)
+    if track is None:
+        names = m.track_names()
+        return result("failed", f"No encuentro una pista llamada '{cmd.target}'. Pistas en Cubase: "
+                                + (", ".join(names) if names else "(no se leen nombres: ¿está activo Mackie Control?)"))
+    if cmd.action == "set_db":
+        r = m.set_volume(track, cmd.value)
+    elif cmd.action == "change_db":
+        r = m.change_volume(track, cmd.value)
+    elif cmd.action in ("mute", "unmute"):
+        r = m.set_button("mute", track, cmd.action == "mute")
+    elif cmd.action in ("solo", "unsolo"):
+        r = m.set_button("solo", track, cmd.action == "solo")
+    else:
+        r = m.set_pan(track, cmd.value)
+    engine.remember("processing_applied", {"ts": time.time(), "type": "mezclador", "action": cmd.action,
+                                           "track": track, "value": cmd.value, "status": r.status})
+    return result(r.status, r.message)
+
+
+def apply_mix_levels(engine, params) -> dict:
+    """Aplica en Cubase las ganancias del último plan de mezcla (cada stem -> pista con el mismo nombre)."""
+    plan = engine.context.get("last_mix_plan")
+    if not plan:
+        return result("skipped", "Primero crea un plan de mezcla (pestaña Mezcla o 'mezcla todas las pistas').")
+    m, err = _get_mixer(engine)
+    if err:
+        return err
+    lines, statuses = [], []
+    for st in plan["stems"]:
+        if engine.stop_event.is_set():
+            lines.append("Detenido por el usuario.")
+            break
+        track = m.find_track(st["name"])
+        if track is None:
+            lines.append(f"- {st['name']}: no hay pista con ese nombre en Cubase (se omite).")
+            statuses.append("skipped")
+            continue
+        r = m.change_volume(track, st["gain_db"])
+        statuses.append(r.status)
+        lines.append(f"- {st['name']} (pista {track}): {r.message}")
+    ok = sum(s == "verified" for s in statuses)
+    head = f"Niveles aplicados en Cubase: {ok} verificados de {len(statuses)} pistas."
+    status = "verified" if statuses and ok == len([s for s in statuses if s != "skipped"]) and ok else \
+        ("unverified" if ok or "unverified" in statuses else "failed")
+    lines.append("Los EQ y compresores del plan siguen indicados en el informe; su aplicación automática es la siguiente fase.")
+    return result(status, head + "\n" + "\n".join(lines))
+
+
 def screen_task(engine, params) -> dict:
     """Ejecuta una tarea en Cubase mirando la pantalla y usando ratón/teclado (modelo de visión local)."""
     from ..screen.agent import ScreenAgent, result_json
@@ -409,7 +487,7 @@ def screen_task(engine, params) -> dict:
     return result(status, "\n".join(lines), [str(log_dir / "registro.json")] + res.screenshots[-1:])
 
 
-REGISTRY = {f.__name__: f for f in (screen_task, analyze_audio, analyze_stems, analyze_midi, mix_plan, compose, render_preview,
+REGISTRY = {f.__name__: f for f in (mixer_control, apply_mix_levels, screen_task, analyze_audio, analyze_stems, analyze_midi, mix_plan, compose, render_preview,
                                     reharmonize, keep_rhythm_new_notes, change_mode, vary_answer, master,
                                     compare_reference, evaluate_last, feedback, cubase_status, scan_plugins,
                                     cubase_save, list_restore_points)}

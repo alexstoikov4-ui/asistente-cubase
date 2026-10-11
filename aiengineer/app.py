@@ -110,6 +110,34 @@ class Engine:
         self.cubase.enabled = enabled
         self.config.save()
 
+    # ------------------------------------------------------------ mezclador por Mackie Control
+    def mixer(self):
+        """Conexión con el mezclador de Cubase (se abre la primera vez que se necesita)."""
+        if self.context.get("_mixer") is not None:
+            return self.context["_mixer"]
+        from .cubase.mackie import MackieSurface
+        from .cubase.midi_ports import WinMidiIn, WinMidiOut
+        from .cubase.mixer_control import MixerControl
+        st = self.config.settings
+        out = WinMidiOut(st.midi_out_port)
+        try:
+            inp = WinMidiIn(st.midi_in_port)
+        except Exception:
+            out.close()
+            raise
+        m = MixerControl(MackieSurface(out, inp), self.config.home / "fader_curve.json")
+        self.context["_mixer"] = m
+        return m
+
+    def disconnect_mixer(self) -> None:
+        m = self.context.pop("_mixer", None)
+        if m is not None:
+            for port in (m.s.out, m.s.inp):
+                try:
+                    port.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
     # ------------------------------------------------------------ órdenes
     def interpret(self, text: str) -> Plan:
         # cada composición nueva usa otra semilla (resultado distinto pero reproducible)
@@ -117,7 +145,7 @@ class Engine:
         return build_plan(text, self.context)
 
     PERSISTED = ("audio_file", "stems_folder", "midi_file", "reference_file", "reference_bands", "style",
-                 "last_analysis", "previous_analysis", "last_master", "seed")
+                 "last_analysis", "previous_analysis", "last_master", "seed", "last_mix_plan")
 
     def run(self, plan: Plan, approve=None, progress=None):
         try:

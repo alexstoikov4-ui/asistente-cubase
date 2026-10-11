@@ -147,6 +147,11 @@ def parse(text: str, context: dict | None = None) -> list[Intent]:
     ent_all = extract_entities(text)
     found: dict[str, Intent] = {}
     whole = norm(text)
+    from .mixer_commands import parse_mixer
+    if parse_mixer(text) is not None:  # ajuste concreto del mezclador: sube/baja/mute/solo/paneo de una pista
+        return [Intent("mixer_control", ent_all, [], clause=whole)]
+    if re.search(r"\baplica\b.{0,30}\b(plan|niveles|balance)\b.{0,30}\b(cubase|mezcla)", whole):
+        return [Intent("apply_mix_levels", ent_all, [], clause=whole)]
     if re.search(r"\b(conserva|manten|mantener|deja)\w*\b.{0,30}\britmo\b", whole) and \
             re.search(r"\b(cambia|nuevas?|otras)\b.{0,15}\bnotas\b", whole):
         found["keep_rhythm_new_notes"] = Intent("keep_rhythm_new_notes", dict(ent_all), clause=whole)

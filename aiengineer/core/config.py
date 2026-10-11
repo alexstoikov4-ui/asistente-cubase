@@ -30,6 +30,8 @@ class Settings:
     vision_model: str = ""  # modelo de visión local en Ollama para el agente de pantalla (p.ej. "qwen2.5vl:7b")
     ollama_url: str = "http://127.0.0.1:11434"
     agent_max_steps: int = 30
+    midi_out_port: str = "AIE a Cubase"  # puerto loopMIDI: de la aplicación a Cubase
+    midi_in_port: str = "Cubase a AIE"  # puerto loopMIDI: de Cubase a la aplicación
 
 
 class Config:

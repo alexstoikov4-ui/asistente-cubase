@@ -73,6 +73,7 @@ class App:
         self._tab_mix()
         self._tab_master()
         self._tab_screen()
+        self._tab_mixer_midi()
         self._tab_plugins()
         self._tab_history()
         self._tab_errors()
@@ -260,6 +261,83 @@ class App:
         ttk.Button(row2, text="Detener ■", command=self._stop).pack(side="left", padx=4)
         self.sc_out = self._text(f, 22)
         self.sc_out.pack(fill="both", expand=True, pady=6)
+
+    def _tab_mixer_midi(self):
+        f = ttk.Frame(self.nb, padding=6)
+        self.nb.add(f, text="Mezclador (MIDI)")
+        guide = ("La aplicación maneja el mezclador de Cubase como una superficie Mackie Control: niveles exactos en dB, "
+                 "mute, solo y paneo, comprobando cada ajuste con lo que Cubase muestra.\n"
+                 "Configuración (una sola vez):\n"
+                 "  1. Instala loopMIDI (gratis, tobias-erichsen.de) y crea dos puertos: 'AIE a Cubase' y 'Cubase a AIE'.\n"
+                 "  2. En Cubase: Dispositivos > Configuración de dispositivos > botón + > Mackie Control.\n"
+                 "     Entrada MIDI = 'AIE a Cubase', Salida MIDI = 'Cubase a AIE'. Aceptar.\n"
+                 "  3. Aquí: elige los puertos y pulsa 'Conectar y probar'.\n"
+                 "Después puedes ordenar: «Sube el bajo 2 dB», «Pon el kick a -6 dB», «Silencia el pad», "
+                 "«Panea los hats 30 a la derecha», «Aplica los niveles del plan de mezcla en Cubase».")
+        ttk.Label(f, text=guide, justify="left", foreground="#333", wraplength=1100).pack(anchor="w")
+        row = ttk.Frame(f)
+        row.pack(fill="x", pady=8)
+        st = self.engine.config.settings
+        self.mo_var = tk.StringVar(value=st.midi_out_port)
+        self.mi_var = tk.StringVar(value=st.midi_in_port)
+        ttk.Label(row, text="Salida hacia Cubase:").pack(side="left")
+        self.mo_box = ttk.Combobox(row, textvariable=self.mo_var, width=22)
+        self.mo_box.pack(side="left", padx=4)
+        ttk.Label(row, text="Entrada desde Cubase:").pack(side="left", padx=(10, 0))
+        self.mi_box = ttk.Combobox(row, textvariable=self.mi_var, width=22)
+        self.mi_box.pack(side="left", padx=4)
+        ttk.Button(row, text="Buscar puertos", command=self._refresh_midi_ports).pack(side="left", padx=4)
+        ttk.Button(row, text="Conectar y probar", command=self._midi_connect).pack(side="left")
+        row2 = ttk.Frame(f)
+        row2.pack(fill="x")
+        ttk.Label(row2, text="Orden de mezclador:").pack(side="left")
+        self.mx_cmd = tk.StringVar(value="Sube el bajo 2 dB")
+        ttk.Entry(row2, textvariable=self.mx_cmd).pack(side="left", fill="x", expand=True, padx=4)
+        ttk.Button(row2, text="Ejecutar ▶", command=self._mixer_order).pack(side="left")
+        self.mx_out = self._text(f, 16)
+        self.mx_out.pack(fill="both", expand=True, pady=6)
+
+    def _refresh_midi_ports(self):
+        from ..cubase.midi_ports import list_ports
+        ports = list_ports()
+        self.mo_box["values"] = ports["out"]
+        self.mi_box["values"] = ports["in"]
+        self._write(self.mx_out, "Puertos de salida: " + (", ".join(ports["out"]) or "ninguno") +
+                    "\nPuertos de entrada: " + (", ".join(ports["in"]) or "ninguno") +
+                    ("" if ports["out"] else "\n(Sin puertos: instala loopMIDI y crea los dos puertos.)"), clear=True)
+
+    def _save_midi_ports(self):
+        st = self.engine.config.settings
+        st.midi_out_port, st.midi_in_port = self.mo_var.get().strip(), self.mi_var.get().strip()
+        self.engine.config.save()
+
+    def _midi_connect(self):
+        self._save_midi_ports()
+        self.engine.disconnect_mixer()
+        self._write(self.mx_out, "Conectando con Cubase…", clear=True)
+
+        def work():
+            from ..cubase.midi_ports import MidiUnavailable
+            try:
+                r = self.engine.mixer().connect()
+                msg = r.message
+                if r.status == "verified":
+                    names = self.engine.mixer().track_names()
+                    msg += "\nTodas las pistas: " + ", ".join(names)
+            except (MidiUnavailable, OSError) as ex:
+                msg = str(ex)
+            self.q.put(("say", self.mx_out, msg))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _mixer_order(self):
+        self._save_midi_ports()
+        text = self.mx_cmd.get().strip()
+        if not text:
+            return
+        plan = self.engine.interpret(text)
+        self._write(self.mx_out, plan.summary(), clear=True)
+        if plan.tasks:
+            self._run_plan(plan, self.mx_out)
 
     def _refresh_models(self):
         from ..screen.brains import OllamaBrain

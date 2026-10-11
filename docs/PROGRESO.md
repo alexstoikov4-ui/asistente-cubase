@@ -84,3 +84,27 @@ una persona (como Claude Desktop) sin gastar créditos.
 En el equipo del usuario: instalar Ollama y `qwen2.5vl:7b` (o el modelo de visión que funcione mejor en ARM),
 probar tareas simples (abrir el mezclador, insertar un plugin) y ajustar el prompt y el factor de reducción de
 la captura según los errores observados.
+
+## Sesión 3 — 2026-10-11: ejecutable, pruebas en el equipo del usuario y mezclador por Mackie Control
+
+### Confirmado en el equipo del usuario (Windows 11 ARM, Cubase 5 de 32 bits)
+- `AIEngineer.exe` (compilado por GitHub Actions) arranca; la composición MIDI funciona y suena bien.
+- «Abre el mezclador» abre el mezclador de Cubase al instante (atajo + verificación de pantalla).
+- Ollama instalado y modelo de visión descargado (pendiente de probar el agente de pantalla).
+
+### Implementado
+- Compilación automática del `.exe` en Windows con pruebas, comprobación de captura y publicación en Releases.
+- Órdenes rápidas de Cubase sin Ollama; botón de carpeta de archivos; cuadro de texto libre en Composición.
+- `cubase/midi_ports.py` (winmm), `cubase/mackie.py` (protocolo Mackie Control, pantalla y LEDs),
+  `cubase/mixer_control.py` (volumen en dB con corrección por secante y curva aprendida, mute/solo con LED,
+  paneo con V-pot, bancos de 8 pistas, búsqueda de pistas por nombre), `cubase/fake_cubase.py` (Cubase simulado),
+  `nlp/mixer_commands.py` (órdenes de mezclador en español), acción para aplicar los niveles del plan de mezcla,
+  pestaña *Mezclador (MIDI)*.
+
+### Por verificar en el equipo real
+- Que Cubase 5 muestre el valor en dB en la pantalla Mackie al tocar el fader (si no, los niveles se informan
+  como "no verificados" y habrá que usar FLIP o NAME/VALUE).
+- Formato exacto del texto de paneo en la pantalla.
+
+### Siguiente paso
+EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN) para aplicar EQ y compresión.

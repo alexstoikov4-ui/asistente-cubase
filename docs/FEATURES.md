@@ -16,7 +16,9 @@ Se genera desde `aiengineer/core/status.py` (también visible en la GUI, pestañ
 | Cubase | Intercambio por archivos (MIDI/WAV para importar en Cubase) | terminada |
 | Cubase | Leer pistas/plugins del .cpr | no posible en este entorno |
 | Cubase | API de control completa de Cubase 5 | no posible en este entorno |
-| Cubase | Control de faders por MIDI (Generic Remote) | pendiente |
+| Cubase | Mezclador por Mackie Control: volumen en dB, mute, solo, paneo, verificados con la pantalla de Cubase | experimental |
+| Cubase | Aplicar en Cubase los niveles del plan de mezcla | experimental |
+| Cubase | EQ de canal y parámetros de plugins por Mackie Control | pendiente |
 | Plugins | Escaneo de carpetas VST y arquitectura 32/64 bits | terminada |
 | Audio | Pico, RMS, true peak, LUFS, LRA, cresta, clipping, DC | terminada |
 | Audio | Espectro por bandas, resonancias, equilibrio tonal | terminada |
@@ -31,7 +33,7 @@ Se genera desde `aiengineer/core/status.py` (también visible en la GUI, pestañ
 | Composición | Arreglo completo multipista por estilo | terminada |
 | Composición | Transformar MIDI existente (conservar ritmo, rearmonizar) | terminada |
 | Mezcla | Plan de mezcla desde stems (balance, EQ, compresión, conflictos) | parcial |
-| Mezcla | Aplicar la mezcla dentro de Cubase automáticamente | pendiente |
+| Mezcla | Aplicar EQ/compresión del plan dentro de Cubase automáticamente | pendiente |
 | Master | Análisis y objetivos por destino; plan de cadena con plugins instalados | terminada |
 | Master | Procesado offline de previsualización (EQ, ganancia, limitador TP) | terminada |
 | Referencias | Comparación con referencia a loudness igualado | terminada |

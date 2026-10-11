@@ -121,6 +121,11 @@ def build_plan(text: str, ctx: dict) -> Plan:
         elif n == "feedback":
             add(Task("feedback", "analysis", {"text": text}, "Registrar tu observación y aplicarla en el próximo ciclo",
                      area="sistema"))
+        elif n == "mixer_control":
+            add(Task("mixer_control", "levels", {"text": text}, "Ajustar el mezclador de Cubase (Mackie Control, "
+                                                                 "con verificación)", area="técnica"))
+        elif n == "apply_mix_levels":
+            add(Task("apply_mix_levels", "levels", {}, "Aplicar en Cubase los niveles del plan de mezcla", area="técnica"))
         elif n == "screen_task":
             add(Task("screen_task", "cubase_control", {"task": text},
                      "Hacerlo en Cubase mirando la pantalla (ratón y teclado, modelo de visión local)", area="sistema"))
