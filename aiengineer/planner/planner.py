@@ -121,6 +121,11 @@ def build_plan(text: str, ctx: dict) -> Plan:
         elif n == "feedback":
             add(Task("feedback", "analysis", {"text": text}, "Registrar tu observación y aplicarla en el próximo ciclo",
                      area="sistema"))
+        elif n == "screen_task":
+            add(Task("screen_task", "cubase_control", {"task": text},
+                     "Hacerlo en Cubase mirando la pantalla (ratón y teclado, modelo de visión local)", area="sistema"))
+            plan.limitations.append("El agente de pantalla usa un modelo local: es más lento y menos fiable que Claude "
+                                    "Desktop; cada paso queda grabado para revisarlo.")
         elif n == "cubase_status":
             add(Task("cubase_status", "analysis", {}, "Detectar Cubase y el proyecto activo", area="sistema"))
         elif n == "scan_plugins":

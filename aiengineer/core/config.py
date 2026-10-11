@@ -27,6 +27,9 @@ class Settings:
     cubase_appdata: str = ""  # vacío = autodetectar
     exchange_dir: str = ""  # carpeta de intercambio con Cubase (vacío = <home>/exchange)
     keystroke_control_enabled: bool = False  # control por teclado (experimental) desactivado por defecto
+    vision_model: str = ""  # modelo de visión local en Ollama para el agente de pantalla (p.ej. "qwen2.5vl:7b")
+    ollama_url: str = "http://127.0.0.1:11434"
+    agent_max_steps: int = 30
 
 
 class Config:

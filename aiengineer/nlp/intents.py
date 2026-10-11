@@ -41,6 +41,9 @@ RULES: list[tuple[str, list[str]]] = [
     ("feedback", [r"\bha perdido\b", r"\bdemasiad[oa]s?\b.*\b(pegada|grave|brillo|comprimid|ancho|reverb)",
                   r"\bsigue siendo\b", r"\bsuena (demasiado|muy|poco)\b", r"\bme gusta\b", r"\bno me gusta\b",
                   r"\bquiero mas\b.*\by menos\b", r"\bmenos sensacion\b"]),
+    ("screen_task", [r"^en cubase\b", r"\b(haz clic|pulsa el boton|abre el (mezclador|menu)|cierra la ventana)\b",
+                     r"\b(inserta|carga|pon|abre|ajusta|mueve|selecciona|activa|desactiva)\b.{0,40}\b(plugin|pro-?q|saturn|"
+                     r"limiter|waves|mezclador|fader|insert|ranura|canal|ventana|envio|eq de cubase)\b"]),
     ("cubase_status", [r"\b(estado|esta abierto|detecta).{0,20}cubase\b", r"\bcubase\b.{0,20}\b(abierto|estado)\b"]),
     ("cubase_save", [r"\bguarda(r)? (el )?proyecto\b"]),
     ("scan_plugins", [r"\b(escanea|detecta|busca|lista)\b.{0,20}\bplugins?\b", r"\bque plugins\b"]),
@@ -64,7 +67,7 @@ RULES: list[tuple[str, list[str]]] = [
     ("analyze", [r"\banaliza\b", r"\bque problemas\b", r"\brevisa\b", r"\bidentifica lo que\b", r"\bdiagnostic"]),
 ]
 
-PIPELINE_ORDER = ["cubase_status", "scan_plugins", "feedback", "analyze", "compare_reference", "mix_fix", "mix",
+PIPELINE_ORDER = ["screen_task", "cubase_status", "scan_plugins", "feedback", "analyze", "compare_reference", "mix_fix", "mix",
                   "kick_bass", "reharmonize", "keep_rhythm_new_notes", "change_mode", "vary_answer", "compose", "climax",
                   "master", "iterate", "cubase_save", "restore"]
 

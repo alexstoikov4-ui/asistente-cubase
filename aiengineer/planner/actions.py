@@ -370,7 +370,40 @@ def list_restore_points(engine, params) -> dict:
     return result("done", "\n".join(lines))
 
 
-REGISTRY = {f.__name__: f for f in (analyze_audio, analyze_stems, analyze_midi, mix_plan, compose, render_preview,
+def screen_task(engine, params) -> dict:
+    """Ejecuta una tarea en Cubase mirando la pantalla y usando ratón/teclado (modelo de visión local)."""
+    from ..screen.agent import ScreenAgent, result_json
+    from ..screen.brains import OllamaBrain
+    from ..screen.desktop import DesktopUnavailable, WindowsDesktop
+    st = engine.config.settings
+    try:
+        desktop = engine.context.get("_desktop") or WindowsDesktop()
+    except DesktopUnavailable as e:
+        return result("skipped", str(e))
+    brain = engine.context.get("_brain")
+    if brain is None:
+        models = OllamaBrain.available_models(st.ollama_url)
+        if not models:
+            return result("skipped", "Ollama no está en marcha o no tiene modelos. Instala Ollama (gratis) y un modelo "
+                                     "de visión, p.ej. 'ollama pull qwen2.5vl:7b', y elígelo en 'Control de pantalla'.")
+        model = st.vision_model if st.vision_model in models else None
+        if model is None:
+            return result("skipped", "Elige un modelo de visión en la pestaña 'Control de pantalla'. Instalados: "
+                                     + ", ".join(models))
+        brain = OllamaBrain(model, st.ollama_url)
+    log_dir = engine.output_dir() / "agente" / time.strftime("%Y%m%d-%H%M%S")
+    agent = ScreenAgent(desktop, brain, engine.stop_event, max_steps=int(params.get("max_steps") or st.agent_max_steps),
+                        log_dir=log_dir, progress=engine.context.get("_progress"),
+                        confirm=engine.context.get("_confirm"))
+    res = agent.run(params["task"])
+    (log_dir / "registro.json").parent.mkdir(parents=True, exist_ok=True)
+    (log_dir / "registro.json").write_text(result_json(res), encoding="utf-8")
+    status = {"done_by_model": "unverified", "stopped": "cancelled"}.get(res.status, "failed")
+    lines = [res.message, f"{len(res.steps)} acciones; capturas de cada paso en {log_dir}"]
+    return result(status, "\n".join(lines), [str(log_dir / "registro.json")] + res.screenshots[-1:])
+
+
+REGISTRY = {f.__name__: f for f in (screen_task, analyze_audio, analyze_stems, analyze_midi, mix_plan, compose, render_preview,
                                     reharmonize, keep_rhythm_new_notes, change_mode, vary_answer, master,
                                     compare_reference, evaluate_last, feedback, cubase_status, scan_plugins,
                                     cubase_save, list_restore_points)}

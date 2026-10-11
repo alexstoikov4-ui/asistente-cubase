@@ -16,6 +16,8 @@ FEATURES: list[tuple[str, str, str]] = [
     ("Cubase", "Detectar Cubase abierto y proyecto activo (título de ventana)", EXPERIMENTAL),
     ("Cubase", "Leer Key Commands.xml para conocer atajos reales", EXPERIMENTAL),
     ("Cubase", "Enviar atajos de teclado a Cubase (SendInput)", EXPERIMENTAL),
+    ("Cubase", "Agente de pantalla: ve la pantalla y usa ratón/teclado (modelo de visión local gratuito)", EXPERIMENTAL),
+    ("Cubase", "Búsqueda de elementos de la interfaz por imagen (sin modelo)", PARTIAL),
     ("Cubase", "Intercambio por archivos (MIDI/WAV para importar en Cubase)", DONE),
     ("Cubase", "Leer pistas/plugins del .cpr", IMPOSSIBLE),
     ("Cubase", "API de control completa de Cubase 5", IMPOSSIBLE),

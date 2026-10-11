@@ -15,6 +15,8 @@ def execute(engine, plan: Plan, approve=None, progress=None) -> list[Task]:
     """approve(task) -> bool se llama cuando la política exige confirmación. progress(texto) informa."""
     say = progress or (lambda s: None)
     engine.stop_event.clear()
+    engine.context["_progress"] = say
+    engine.context["_confirm"] = lambda text: bool(approve and approve(Task("confirmar", "cubase_control", {}, text)))
     for task in plan.tasks:
         if engine.stop_event.is_set():
             task.status = "cancelled"

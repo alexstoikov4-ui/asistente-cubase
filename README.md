@@ -23,6 +23,22 @@ puede ejecutar, mide el resultado y explica qué ha hecho y qué limitaciones ha
 | Cubase | Detección de instalación (y su arquitectura real), proceso, ventana y proyecto activo; lectura de *Key Commands.xml*; envío de atajos (experimental, desactivado por defecto) con verificación cuando es posible; carpeta de intercambio con instrucciones de importación. |
 | Plugins | Escaneo real de carpetas VST2/VST3 y bundles de Waves, arquitectura 32/64 bits leída del DLL, compatibilidad con tu Cubase y asignación de funciones (EQ, compresor, limitador...). |
 
+## Control de Cubase por pantalla (gratis, sin conexión)
+
+La pestaña **Control de pantalla** funciona como Claude Desktop: captura la pantalla, un modelo de visión
+decide el siguiente clic o tecla, la aplicación lo ejecuta y comprueba que la pantalla cambió, y repite
+hasta terminar. El modelo es **local y gratuito** (no gasta créditos):
+
+1. Instala [Ollama](https://ollama.com) (tiene versión para Windows).
+2. Descarga un modelo de visión, por ejemplo `ollama pull qwen2.5vl:7b` (necesita ~8 GB de RAM libres).
+3. En la pestaña, pulsa *Buscar modelos*, elige el modelo y escribe la tarea, o di en *Órdenes*:
+   «Inserta Pro-Q 3 en la pista del bajo».
+
+Protecciones: solo actúa si la ventana activa es de Cubase (incluidas las de plugins), bloquea atajos
+peligrosos (cerrar, proyecto nuevo...), se para con *Detener* o llevando el ratón a la esquina superior
+izquierda, se detiene si la pantalla no responde y guarda una captura de cada paso. Es más lento y menos
+fiable que Claude Desktop porque el modelo local es mucho más pequeño.
+
 ## Instalación en Windows 11
 
 1. Instala **Python 3.10 o superior** desde python.org (marca *Add Python to PATH*; incluye tkinter).

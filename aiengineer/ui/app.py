@@ -71,6 +71,7 @@ class App:
         self._tab_compose()
         self._tab_mix()
         self._tab_master()
+        self._tab_screen()
         self._tab_plugins()
         self._tab_history()
         self._tab_errors()
@@ -220,6 +221,66 @@ class App:
         ttk.Button(row, text="Masterizar", command=self._master).pack(side="left")
         self.ms_out = self._text(f, 24)
         self.ms_out.pack(fill="both", expand=True)
+
+    def _tab_screen(self):
+        f = ttk.Frame(self.nb, padding=6)
+        self.nb.add(f, text="Control de pantalla")
+        info = ("El agente mira la pantalla y usa ratón y teclado en Cubase, como Claude Desktop, pero con un modelo de "
+                "visión LOCAL y gratuito (Ollama). Instala Ollama y un modelo de visión, p.ej.:  ollama pull qwen2.5vl:7b\n"
+                "Seguridad: solo actúa sobre ventanas de Cubase; Detener o llevar el ratón a la esquina superior "
+                "izquierda lo para al instante; cada paso se guarda como captura.")
+        ttk.Label(f, text=info, wraplength=1050, foreground="#444").pack(anchor="w")
+        row = ttk.Frame(f)
+        row.pack(fill="x", pady=6)
+        ttk.Label(row, text="Modelo:").pack(side="left")
+        self.vm_var = tk.StringVar(value=self.engine.config.settings.vision_model)
+        self.vm_box = ttk.Combobox(row, textvariable=self.vm_var, width=30)
+        self.vm_box.pack(side="left", padx=4)
+        self.vm_box.bind("<<ComboboxSelected>>", lambda e: self._save_vision_model())
+        ttk.Button(row, text="Buscar modelos", command=self._refresh_models).pack(side="left")
+        ttk.Label(row, text="Pasos máx.:").pack(side="left", padx=(12, 2))
+        self.steps_var = tk.StringVar(value=str(self.engine.config.settings.agent_max_steps))
+        ttk.Entry(row, textvariable=self.steps_var, width=5).pack(side="left")
+        self.ollama_lbl = ttk.Label(row, text="", foreground="#555")
+        self.ollama_lbl.pack(side="left", padx=10)
+        row2 = ttk.Frame(f)
+        row2.pack(fill="x")
+        ttk.Label(row2, text="Tarea en Cubase:").pack(side="left")
+        self.sc_task = tk.StringVar(value="Abre el mezclador e inserta FabFilter Pro-Q 3 en la primera ranura del canal 1")
+        ttk.Entry(row2, textvariable=self.sc_task).pack(side="left", fill="x", expand=True, padx=4)
+        ttk.Button(row2, text="Ejecutar ▶", command=self._screen_run).pack(side="left")
+        ttk.Button(row2, text="Detener ■", command=self._stop).pack(side="left", padx=4)
+        self.sc_out = self._text(f, 22)
+        self.sc_out.pack(fill="both", expand=True, pady=6)
+
+    def _refresh_models(self):
+        from ..screen.brains import OllamaBrain
+        models = OllamaBrain.available_models(self.engine.config.settings.ollama_url)
+        self.vm_box["values"] = models
+        if models:
+            self.ollama_lbl.configure(text=f"Ollama en marcha: {len(models)} modelos")
+            if self.vm_var.get() not in models:
+                self.vm_var.set(models[0])
+            self._save_vision_model()
+        else:
+            self.ollama_lbl.configure(text="Ollama no responde en " + self.engine.config.settings.ollama_url)
+
+    def _save_vision_model(self):
+        self.engine.config.settings.vision_model = self.vm_var.get().strip()
+        self.engine.config.save()
+
+    def _screen_run(self):
+        self._save_vision_model()
+        try:
+            self.engine.config.settings.agent_max_steps = max(1, int(self.steps_var.get()))
+            self.engine.config.save()
+        except ValueError:
+            pass
+        task = self.sc_task.get().strip()
+        if not task:
+            return
+        self._write(self.sc_out, f"Tarea: {task}", clear=True)
+        self._single("screen_task", "cubase_control", {"task": task}, "Agente de pantalla", self.sc_out)
 
     def _tab_plugins(self):
         f = ttk.Frame(self.nb, padding=6)

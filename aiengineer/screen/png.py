@@ -84,3 +84,15 @@ def read_png(path) -> np.ndarray:
     if c == 1:
         img = np.repeat(img, 3, axis=2)
     return img[:, :, :3]
+
+
+def encode_png(img: np.ndarray) -> bytes:
+    """PNG en memoria (para enviar capturas al modelo de visión)."""
+    a = np.asarray(img, dtype=np.uint8)
+    if a.ndim == 2:
+        a = np.stack([a] * 3, axis=-1)
+    a = a[:, :, :3]
+    h, w, _ = a.shape
+    raw = b"".join(b"\x00" + a[y].tobytes() for y in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + _chunk(b"IDAT", zlib.compress(raw, 6)) + _chunk(b"IEND", b""))

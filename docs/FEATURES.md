@@ -11,6 +11,8 @@ Se genera desde `aiengineer/core/status.py` (también visible en la GUI, pestañ
 | Cubase | Detectar Cubase abierto y proyecto activo (título de ventana) | experimental |
 | Cubase | Leer Key Commands.xml para conocer atajos reales | experimental |
 | Cubase | Enviar atajos de teclado a Cubase (SendInput) | experimental |
+| Cubase | Agente de pantalla: ve la pantalla y usa ratón/teclado (modelo de visión local gratuito) | experimental |
+| Cubase | Búsqueda de elementos de la interfaz por imagen (sin modelo) | parcial |
 | Cubase | Intercambio por archivos (MIDI/WAV para importar en Cubase) | terminada |
 | Cubase | Leer pistas/plugins del .cpr | no posible en este entorno |
 | Cubase | API de control completa de Cubase 5 | no posible en este entorno |
@@ -49,3 +51,4 @@ Leyenda: **terminada** = implementada y cubierta por pruebas; **parcial** = func
 - Estructura desde audio: bloques de 4 compases con nivel de energía y fronteras por novedad; no nombra secciones con certeza.
 - Plan de mezcla: los ajustes se calculan y se previsualizan offline, pero deben aplicarse en Cubase a mano hasta implementar Generic Remote / Mackie Control.
 - Melodías: en 180 frases de prueba, 0 saltos de más de una octava y un 3% con un recorrido escalar de 5 notas.
+- Agente de pantalla: implementado y probado con una pantalla simulada; la captura, los clics y el modelo local deben probarse en tu Windows. Un modelo local es más lento y comete más errores que Claude Desktop.

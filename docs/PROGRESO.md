@@ -57,3 +57,30 @@ planner, ui, data/styles), `tests/` (9 módulos), `docs/`, `README.md`, `iniciar
 Ejecutar `pruebas_windows.bat` y `python -m aiengineer status` en el equipo con Cubase 5, revisar la
 pestaña *Plugins y permisos* tras *Escanear plugins*, y con esos datos implementar el puente Generic Remote
 (salida MIDI con `winmm` + archivo de configuración importable en Cubase).
+
+## Sesión 2 — 2026-10-11: control de Cubase por pantalla, gratuito
+
+### Contexto del usuario
+Cubase 5 de 32 bits en un equipo Windows 11 con procesador ARM. Quiere que la aplicación maneje Cubase como
+una persona (como Claude Desktop) sin gastar créditos.
+
+### Implementado
+- `screen/desktop.py`: capturas (GDI), ratón, teclado Unicode, proceso de la ventana activa (ctypes, apto para
+  DPI alto); `FakeDesktop` para pruebas.
+- `screen/brains.py`: modelo de visión local vía Ollama (petición `/api/chat` con la captura), intérprete de
+  respuestas JSON y estilo UI-TARS (coordenadas en píxeles o relativas 0-1000).
+- `screen/agent.py`: ciclo capturar → decidir → actuar → comprobar, con protecciones (solo ventanas de
+  Cubase, parada por botón o esquina, atajos bloqueados, límite de pasos, detección de pantalla sin respuesta,
+  captura de cada paso). El resultado se informa como "no verificado": la app no puede confirmar por sí sola
+  el objetivo.
+- `screen/png.py` y `screen/vision.py`: PNG sin dependencias y búsqueda de plantillas (base para rutinas).
+- Integración: orden en español («Inserta Pro-Q 3 en la pista del bajo») → tarea `screen_task` con permiso
+  `cubase_control`; pestaña *Control de pantalla* en la GUI.
+
+### Pruebas
+85 superadas (incluye agente con pantalla simulada, servidor Ollama simulado, reglas de seguridad).
+
+### Siguiente paso concreto
+En el equipo del usuario: instalar Ollama y `qwen2.5vl:7b` (o el modelo de visión que funcione mejor en ARM),
+probar tareas simples (abrir el mezclador, insertar un plugin) y ajustar el prompt y el factor de reducción de
+la captura según los errores observados.

@@ -37,8 +37,20 @@ y marcado como experimental hasta probarlo en tu equipo.
 5. **Protocolo Mackie Control (pendiente, a evaluar).** Cubase 5 soporta superficies Mackie Control.
    Emular una superficie daría control **bidireccional**: Cubase devuelve la posición de los faders y los
    nombres de pista, lo que permitiría **verificar** los cambios de nivel y reconocer pistas.
-6. **Automatización visual (no implementada).** Reconocimiento de pantalla + ratón: frágil (depende de
-   resolución, tema y posición de ventanas). Solo se usará como último recurso y siempre con verificación.
+6. **Agente de pantalla (implementado, experimental).** El mismo ciclo que Claude Desktop: captura → un
+   modelo de visión decide la acción → ratón/teclado → comprobación de que la pantalla cambió. Usa un modelo
+   local gratuito (Ollama), así que es más lento y comete más errores que Claude. Para mover parámetros finos
+   (bandas de EQ) es preferible escribir valores o usar presets cuando el plugin lo permita. Además hay una
+   búsqueda de elementos por imagen sin modelo (`screen/vision.py`) como base para rutinas grabadas.
+
+## Equipo del usuario: Cubase 5 de 32 bits en Windows 11 ARM
+
+- Cubase 5 (x86) se ejecuta con la emulación de Windows on ARM; los **controladores** no se emulan, así que la
+  llave eLicenser, iLok y el ASIO de la interfaz necesitan versión ARM64 (o usar el controlador genérico).
+- Con Cubase de 32 bits solo sirven plugins de 32 bits: hay que instalar las versiones de 32 bits de
+  FabFilter y Limiter 6. El escáner marca lo que no se puede cargar.
+- La aplicación puede usar Python ARM64 nativo o Python x64 emulado; la captura y los clics funcionan sobre
+  Cubase x86 en ambos casos.
 
 ## Plugins y arquitecturas
 
