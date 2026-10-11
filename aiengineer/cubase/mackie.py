@@ -38,6 +38,12 @@ class SurfaceState:
     online: bool = False
     updates: int = 0
     received: int = 0  # mensajes recibidos de Cubase, de cualquier tipo
+    sysex: int = 0  # de ellos, SysEx (texto de pantalla, saludo)
+    samples: list = field(default_factory=list)  # primeros mensajes en hexadecimal, para diagnóstico
+
+    def stats(self) -> str:
+        return (f"{self.received} mensajes recibidos ({self.received - self.sysex} cortos: luces/faders; "
+                f"{self.sysex} SysEx: texto de pantalla)")
 
     def lcd_row(self, row: int) -> str:
         return "".join(self.lcd[row * 56:(row + 1) * 56])
@@ -124,7 +130,11 @@ class MackieSurface:
         if not msg:
             return
         st.received += 1
+        if len(st.samples) < 12:
+            st.samples.append(msg[:24].hex(" "))
         b0 = msg[0]
+        if b0 == 0xF0:
+            st.sysex += 1
         if msg[:5] == HEADER and len(msg) > 6:
             cmd = msg[5]
             if cmd == 0x12:  # texto de pantalla

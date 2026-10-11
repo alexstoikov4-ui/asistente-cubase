@@ -341,7 +341,8 @@ class App:
                 msg = r.message
                 if r.status == "verified":
                     names = self.engine.mixer().track_names()
-                    msg += "\nTodas las pistas: " + ", ".join(names)
+                    if names:
+                        msg += "\nTodas las pistas: " + ", ".join(names)
             except (MidiUnavailable, OSError) as ex:
                 msg = str(ex)
             self.q.put(("say", self.mx_out, msg))
