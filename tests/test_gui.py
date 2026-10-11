@@ -51,3 +51,18 @@ def test_gui_order_and_panels(gui):
     assert "Nueva versión verificada" in app.c_out.get("1.0", "end")
     app._fill_history()
     assert len(app.hist_tree.get_children()) >= 3
+
+
+def test_gui_compose_free_text(gui):
+    app, root, eng = gui
+    eng.set_mode("autonomous")
+    app.c_free.delete("1.0", "end")
+    app.c_free.insert("1.0", "Compón un drop de tech house oscuro a 125 bpm")
+    app._compose_free()
+    _wait(app, root)
+    out = app.c_out.get("1.0", "end")
+    assert "tech_house" in out and "oscuro" in out and "verified" in out
+    app.c_free.delete("1.0", "end")
+    app.c_free.insert("1.0", "hola qué tal")
+    app._compose_free()
+    assert "No he encontrado" in app.c_out.get("1.0", "end")

@@ -150,7 +150,14 @@ class App:
     def _tab_compose(self):
         f = ttk.Frame(self.nb, padding=6)
         self.nb.add(f, text="Composición MIDI")
-        g = ttk.LabelFrame(f, text="Nueva composición", padding=6)
+        free = ttk.LabelFrame(f, text="Pídelo con tus palabras", padding=6)
+        free.pack(fill="x", pady=(0, 6))
+        self.c_free = tk.Text(free, height=2, wrap="word", font=("Segoe UI", 10))
+        self.c_free.pack(side="left", fill="x", expand=True)
+        self.c_free.insert("1.0", "Compón un breakdown y un drop de trance épico en Fa# menor a 136 bpm")
+        self.c_free.bind("<Control-Return>", lambda e: (self._compose_free(), "break"))
+        ttk.Button(free, text="Componer ▶", command=self._compose_free).pack(side="left", padx=4)
+        g = ttk.LabelFrame(f, text="O elige las opciones", padding=6)
         g.pack(fill="x")
         self.c_style = tk.StringVar(value="progressive_house")
         self.c_mood = tk.StringVar(value="emotivo")
@@ -520,6 +527,23 @@ class App:
         plan = Plan("componer", [], [Task("compose", "compose", params, "Componer y exportar MIDI", area="musical"),
                                      Task("render_preview", "export_files", {}, "Previsualización WAV", area="musical")])
         self._write(self.c_out, "Componiendo…", clear=True)
+        self._run_plan(plan, self.c_out)
+
+    def _compose_free(self):
+        """Interpreta la frase (estilo, emoción, tonalidad, bpm, secciones, transformaciones) y la ejecuta."""
+        text = self.c_free.get("1.0", "end").strip()
+        if not text:
+            return
+        plan = self.engine.interpret(text)
+        self._write(self.c_out, plan.summary(), clear=True)
+        if not plan.tasks:
+            self._write(self.c_out, "\nNo he encontrado nada que componer o transformar en esa frase. Prueba, por "
+                                    "ejemplo: «Compón un drop de tech house oscuro» o «Rehaz la armonía manteniendo el "
+                                    "ritmo» (con un MIDI elegido abajo).")
+            return
+        if self.t_file.get().strip():
+            self.engine.context["midi_file"] = self.t_file.get().strip()
+            plan = self.engine.interpret(text)
         self._run_plan(plan, self.c_out)
 
     def _transform(self):
