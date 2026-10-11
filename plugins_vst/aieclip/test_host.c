@@ -31,8 +31,17 @@ struct AEffect {
     void (VSTCALL *processDoubleReplacing)(AEffect*, double**, double**, int32_t);
     char future[56];
 };
+/* Como Cubase: si el plugin avisa de un cambio de E/S o de latencia (audioMasterIOChanged), el
+   anfitrión lo reinicia en el acto (apagar y encender). Ningún plugin debería pedirlo mientras procesa. */
+static int io_changed = 0;
 static VstIntPtr VSTCALL host(AEffect* e, int32_t op, int32_t i, VstIntPtr v, void* p, float o) {
-    (void)e; (void)i; (void)v; (void)p; (void)o;
+    (void)i; (void)v; (void)p; (void)o;
+    if (op == 13 && e) {
+        if (++io_changed > 50) { printf("FALLO: el plugin pide reiniciarse sin parar (bucle)\n"); exit(3); }
+        e->dispatcher(e, 12, 0, 0, NULL, 0);
+        e->dispatcher(e, 12, 0, 1, NULL, 0);
+        return 1;
+    }
     return op == 1 ? 2400 : 0; /* audioMasterVersion */
 }
 static int fails = 0;
@@ -105,6 +114,37 @@ int main(int argc, char** argv) {
         }
     }
     fx->setParameter(fx, 5, 1.0f);
+
+    /* mover OverSmp mientras suena (como al tocar el deslizador en Cubase): sin cuelgues, sin pedir
+       reinicios al anfitrión, latencia constante y ningún pico por encima del techo */
+    {
+        int lat0 = fx->initialDelay, bad = 0, steps = 0;
+        double peak = 0, ceil = pow(10, -3 / 20.0);
+        fx->setParameter(fx, 1, (-3.0f + 24) / 24);
+        fx->setParameter(fx, 2, 0.3f);
+        for (int i = 0; i < n; i++) { inL[i] = 2.0f * sinf(2 * 3.14159265f * 100 * i / 48000.0f); inR[i] = -inL[i]; }
+        io_changed = 0;
+        for (int rep = 0; rep < 4; rep++) {
+            for (int s = 0; s < n; s += 256, steps++) {
+                fx->setParameter(fx, 3, (float)((steps * 7) % 41) / 40.0f); /* valores intermedios incluidos */
+                if (steps % 37 == 0) { fx->dispatcher(fx, 12, 0, 0, NULL, 0); fx->dispatcher(fx, 12, 0, 1, NULL, 0); }
+                float* a[2] = {inL + s, inR + s};
+                float* b[2] = {outL + s, outR + s};
+                int len = n - s < 256 ? n - s : 256;
+                fx->processReplacing(fx, a, b, len);
+                for (int j = 0; j < len; j++) {
+                    if (!(outL[s + j] == outL[s + j]) || !(outR[s + j] == outR[s + j])) bad++;
+                    if (fabs(outL[s + j]) > peak) peak = fabs(outL[s + j]);
+                    if (fabs(outR[s + j]) > peak) peak = fabs(outR[s + j]);
+                }
+                if (fx->initialDelay != lat0) bad++;
+            }
+        }
+        char msg[160];
+        snprintf(msg, sizeof msg, "mover OverSmp en marcha (%d cambios): avisos de reinicio %d, errores %d, pico %.4f",
+                 steps, io_changed, bad, peak);
+        CHECK(io_changed == 0 && bad == 0 && peak <= ceil + 1e-6, msg);
+    }
     fx->dispatcher(fx, 1, 0, 0, NULL, 0);
     printf(fails ? "\n%d pruebas fallidas\n" : "\nTodas las pruebas superadas\n", fails);
     return fails ? 1 : 0;

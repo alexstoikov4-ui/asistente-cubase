@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <algorithm>
 #include <vector>
 
 #if defined(_WIN32)
@@ -62,7 +63,7 @@ enum {
     effGetEffectName = 45, effGetVendorString = 47, effGetProductString = 48, effGetVendorVersion = 49,
     effCanDo = 51, effGetTailSize = 52, effGetParameterProperties = 56, effGetVstVersion = 58
 };
-enum { audioMasterVersion = 1, audioMasterIOChanged = 13 };
+enum { audioMasterVersion = 1 };
 enum { effFlagsCanReplacing = 1 << 4, effFlagsCanDoubleReplacing = 1 << 12 };
 static const int32_t kEffectMagic = 0x56737450;  // 'VstP'
 static const int32_t kUniqueId = 0x41494563;     // 'AIEc'
@@ -70,6 +71,9 @@ static const int32_t kUniqueId = 0x41494563;     // 'AIEc'
 enum Param { kInput = 0, kCeiling, kSoftness, kOversampling, kOutput, kMix, kSafety, kNumParams };
 static const int kOsFactors[5] = {1, 2, 4, 8, 16};
 static const int kTapsPerPhase = 16;  // longitud del filtro por fase (calidad del sobremuestreo)
+// Latencia fija en todos los factores: (L-1)/2 de subida + (L-1)/2 de bajada - (N-1) por tomar la
+// salida en la última fase = L-N = N*(kTapsPerPhase-1) muestras altas = kTapsPerPhase-1 muestras.
+static const int kLatency = kTapsPerPhase - 1;
 
 static void copyStr(void* dst, const char* src, size_t max) {
     char* d = static_cast<char*>(dst);
@@ -111,8 +115,8 @@ static std::vector<double> designLowpass(int N, int L) {
 }
 
 struct Channel {
-    std::vector<double> upHist, downHist, dryDelay;
-    int upPos = 0, downPos = 0, dryPos = 0;
+    std::vector<double> upHist, downHist, dryDelay, wetDelay;
+    int upPos = 0, downPos = 0, dryPos = 0, wetPos = 0;
 };
 
 class AIEClip {
@@ -122,7 +126,10 @@ public:
     float params[kNumParams];
     double sampleRate = 44100;
     int osIndex = -1, N = 1, latency = 0;
-    std::vector<double> h;  // filtro para subir y bajar la frecuencia (N*kTapsPerPhase coeficientes)
+    // Filtros de todos los factores calculados al crear el plugin: cambiar el sobremuestreo durante la
+    // reproducción no reserva memoria ni cambia la latencia (no hace falta avisar a Cubase).
+    std::vector<double> filters[5];
+    const double* h = nullptr;  // filtro activo (N*kTapsPerPhase coeficientes)
     Channel ch[2];
 
     explicit AIEClip(audioMasterCallback cb) : host(cb) {
@@ -143,6 +150,15 @@ public:
         fx.uniqueID = kUniqueId;
         fx.version = 1000;
         fx.ioRatio = 1.0f;
+        for (int i = 1; i < 5; ++i) filters[i] = designLowpass(kOsFactors[i], kOsFactors[i] * kTapsPerPhase);
+        latency = kLatency;
+        fx.initialDelay = kLatency;
+        for (auto& c : ch) {
+            c.upHist.assign(kTapsPerPhase, 0.0);
+            c.downHist.assign(16 * kTapsPerPhase, 0.0);
+            c.dryDelay.assign(kLatency + 1, 0.0);
+            c.wetDelay.assign(kLatency + 1, 0.0);
+        }
         configure();
     }
 
@@ -155,28 +171,28 @@ public:
     double outputDb() const { return -24.0 + 36.0 * params[kOutput]; }
     int osIdx() const { int i = int(params[kOversampling] * 4.0f + 0.5f); return i < 0 ? 0 : (i > 4 ? 4 : i); }
 
+    // Se llama desde el hilo de audio: solo cambia punteros y pone a cero historiales (sin reservar memoria).
     void configure() {
         int idx = osIdx();
         if (idx == osIndex) return;
         osIndex = idx;
         N = kOsFactors[idx];
-        h = (N > 1) ? designLowpass(N, N * kTapsPerPhase) : std::vector<double>();
-        // retardo en muestras altas: (L-1)/2 de subida + (L-1)/2 de bajada - (N-1) porque la
-        // salida se toma en la última fase -> L-N = N*(kTapsPerPhase-1): un número entero de muestras
-        int newLatency = (N > 1) ? kTapsPerPhase - 1 : 0;
+        h = (N > 1) ? filters[idx].data() : nullptr;
         for (auto& c : ch) {
-            c.upHist.assign(kTapsPerPhase, 0.0);
-            c.downHist.assign(h.size() ? h.size() : 1, 0.0);
-            c.dryDelay.assign(newLatency + 1, 0.0);
-            c.upPos = c.downPos = c.dryPos = 0;
+            std::fill(c.upHist.begin(), c.upHist.end(), 0.0);
+            std::fill(c.downHist.begin(), c.downHist.end(), 0.0);
+            std::fill(c.wetDelay.begin(), c.wetDelay.end(), 0.0);
+            c.upPos = c.downPos = c.wetPos = 0;
         }
-        if (newLatency != latency) {
-            latency = newLatency;
-            fx.initialDelay = latency;
-            if (host) host(&fx, audioMasterIOChanged, 0, 0, nullptr, 0.0f);
+    }
+
+    void reset() {
+        for (auto& c : ch) {
+            std::fill(c.dryDelay.begin(), c.dryDelay.end(), 0.0);
+            c.dryPos = 0;
         }
-        latency = newLatency;
-        fx.initialDelay = latency;
+        osIndex = -1;
+        configure();
     }
 
     // Devuelve la señal procesada; en 'dry' deja la entrada retrasada la misma latencia.
@@ -188,12 +204,16 @@ public:
         x *= gin;
         double y;
         if (N == 1) {
-            y = clipSample(x, T, k);
+            // sin sobremuestreo: se retrasa igual que con filtros para que la latencia sea siempre la misma
+            int W = int(c.wetDelay.size());
+            c.wetDelay[c.wetPos] = clipSample(x, T, k);
+            y = c.wetDelay[(c.wetPos + W - kLatency) % W];
+            c.wetPos = (c.wetPos + 1) % W;
         } else {
             // historial de entrada para el filtro polifásico de subida
             c.upPos = (c.upPos + kTapsPerPhase - 1) % kTapsPerPhase;
             c.upHist[c.upPos] = x;
-            int L = int(h.size());
+            int L = N * kTapsPerPhase;
             for (int p = 0; p < N; ++p) {
                 double acc = 0;
                 for (int t = 0; t < kTapsPerPhase; ++t) acc += h[p + t * N] * c.upHist[(c.upPos + t) % kTapsPerPhase];
@@ -263,7 +283,7 @@ static VstIntPtr VSTCALL dispatcher(AEffect* e, int32_t op, int32_t idx, VstIntP
         case effClose: delete p; return 0;
         case effSetSampleRate: p->sampleRate = opt; return 0;
         case effSetBlockSize: return 0;
-        case effMainsChanged: if (val) { p->osIndex = -1; p->configure(); } return 0;
+        case effMainsChanged: if (val) p->reset(); return 0;
         case effGetProgram: return 0;
         case effSetProgram: return 0;
         case effGetProgramName: case effGetProgramNameIndexed: copyStr(ptr, "Default", 25); return 1;
@@ -293,10 +313,14 @@ static void VSTCALL processReplacing(AEffect* e, float** in, float** out, int32_
 static void VSTCALL processDouble(AEffect* e, double** in, double** out, int32_t n) { self(e)->run(in, out, n); }
 static void VSTCALL processAccumulating(AEffect* e, float** in, float** out, int32_t n) {
     // proceso antiguo (acumulativo), por compatibilidad con hosts muy viejos
-    std::vector<float> a(n), b(n);
-    float* tmp[2] = {a.data(), b.data()};
-    self(e)->run(in, tmp, n);
-    for (int c = 0; c < 2; ++c) for (int i = 0; i < n; ++i) out[c][i] += tmp[c][i];
+    float a[256], b[256];  // por bloques: sin reservar memoria en el hilo de audio
+    for (int32_t s = 0; s < n; s += 256) {
+        int32_t len = n - s < 256 ? n - s : 256;
+        float* src[2] = {in[0] + s, in[1] + s};
+        float* tmp[2] = {a, b};
+        self(e)->run(src, tmp, len);
+        for (int32_t i = 0; i < len; ++i) { out[0][s + i] += a[i]; out[1][s + i] += b[i]; }
+    }
 }
 
 VSTEXPORT AEffect* VSTPluginMain(audioMasterCallback host) {

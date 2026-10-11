@@ -15,8 +15,9 @@ página de descargas como `AIEClip-32bits.dll` / `AIEClip-64bits.dll`.
 | Mix | 0 … 100 % | mezcla en paralelo (la señal seca va retrasada igual que la procesada) |
 | Safety | Off/On | recorte duro final al techo para que ningún pico lo supere |
 
-Latencia: 0 muestras a 1x, 15 muestras con sobremuestreo (se comunica al anfitrión con
-`initialDelay`, Cubase la compensa).
+Latencia: siempre 15 muestras, también a 1x (se comunica al anfitrión con `initialDelay` y Cubase la
+compensa). Es fija a propósito: cambiar OverSmp durante la reproducción no obliga a Cubase a reiniciar el
+plugin, y los filtros de todos los factores se calculan al cargarlo (el hilo de audio no reserva memoria).
 
 ## Instalar en Cubase 5 (32 bits)
 1. Descarga `AIEClip-32bits.dll`.

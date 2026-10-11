@@ -123,3 +123,13 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
 ### Por verificar en el equipo real
 - Que Cubase 5 de 32 bits (emulado en ARM) cargue `AIEClip.dll` y lo muestre en los insertos.
 - No tiene interfaz gráfica propia todavía: Cubase muestra sus deslizadores genéricos.
+
+### Fallo encontrado por el usuario y corregido
+- Cubase 5 se cerraba al tocar OverSmp. Causa: al cambiar la latencia, el plugin avisaba a Cubase
+  (`audioMasterIOChanged`) desde el hilo de audio; Cubase lo reiniciaba en el acto (`effMainsChanged`), el
+  reinicio volvía a avisar antes de guardar la nueva latencia y se formaba un bucle sin fin (desbordamiento de
+  pila). Reproducido con `test_host` imitando ese comportamiento de Cubase (la versión anterior da
+  "Segmentation fault").
+- Solución: latencia fija de 15 muestras en todos los factores, filtros precalculados al cargar, sin
+  reservar memoria en el hilo de audio y sin avisos al anfitrión. Nueva prueba: 752 cambios de OverSmp en
+  plena reproducción con reinicios intercalados, sin errores (también con AddressSanitizer/UBSan).
