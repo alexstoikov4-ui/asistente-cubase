@@ -50,6 +50,7 @@ class App:
         self.project_box.bind("<<ComboboxSelected>>", lambda e: self._open_project(self.project_var.get()))
         ttk.Button(top, text="Nuevo…", command=self._new_project).pack(side="left")
         ttk.Button(top, text="Fuentes…", command=self._choose_sources).pack(side="left", padx=4)
+        ttk.Button(top, text="📁 Carpeta de archivos", command=self._open_files_folder).pack(side="left")
         ttk.Label(top, text="Modo:").pack(side="left", padx=(16, 2))
         self.mode_var = tk.StringVar(value=MODE_LABELS[self.engine.policy.mode])
         mode_box = ttk.Combobox(top, textvariable=self.mode_var, values=list(MODE_LABELS.values()), width=14,
@@ -404,6 +405,18 @@ class App:
             self._update_sources_label()
             self._write(self.chat, "Archivos de trabajo: " + (", ".join(f"{k}={v}" for k, v in found.items()) or
                                                                "no se encontraron WAV ni MIDI."))
+
+    def _open_files_folder(self):
+        """Abre en el Explorador la carpeta con los MIDI/WAV generados (la del proyecto si hay uno abierto)."""
+        folder = self.engine.output_dir() if self.engine.project else self.engine.config.exchange_dir
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            import os
+            os.startfile(str(folder))  # solo existe en Windows
+            self._write(self.chat, f"Abierta la carpeta: {folder}\n(Copia para importar en Cubase: "
+                                   f"{self.engine.config.exchange_dir})")
+        except (AttributeError, OSError):
+            self._write(self.chat, f"Los archivos están en: {folder}\nCopia para Cubase: {self.engine.config.exchange_dir}")
 
     def _update_sources_label(self):
         c = self.engine.context
