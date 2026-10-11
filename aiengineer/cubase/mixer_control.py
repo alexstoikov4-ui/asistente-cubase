@@ -247,20 +247,44 @@ class MixerControl:
             return Result("verified" if ok else "unverified",
                           f"Pista {track}: paneo al centro" + (" (confirmado por la corona de LEDs)." if ok else
                                                                " (sin confirmación de Cubase)."), 0.0)
+        # Calibración con la corona: se gira hasta pasar el objetivo, se anotan los pasos en que la corona
+        # cambia de LED (fronteras en 10, 30, 50... de paneo) y se vuelve atrás hasta el valor pedido.
         direction = 1 if pan > 0 else -1
-        turned = 0
-        for _ in range(60):
+        target = abs(pan)
+        turned, prev, crossings = 0, 0.0, []
+        for _ in range(120):
             self.s.vpot(strip, direction * 2)
             turned += 2
-            self.s.poll(0.08)
+            self.s.poll(0.06)
             ring = self.ring_to_pan(self.s.state.vpot_rings.get(strip))
-            if ring is None and turned >= abs(pan):
+            if ring is None:
+                if turned >= target:
+                    break
+                continue
+            ring = abs(ring)
+            if ring != prev:
+                crossings.append((turned, ring))
+                prev = ring
+            if ring >= target + 10 or ring >= 100:
                 break
-            if ring is not None and abs(ring) >= abs(pan) - 10:
-                side = "derecha" if pan > 0 else "izquierda"
-                return Result("unverified", f"Pista {track}: paneo hacia la {side}, aprox. {abs(ring):.0f} según la "
-                                            f"corona de LEDs (pedido {abs(pan):.0f}). Cubase no envía el valor exacto.",
-                              ring)
         side = "derecha" if pan > 0 else "izquierda"
-        return Result("unverified", f"Pista {track}: paneo girado hacia la {side} ({turned} pasos del codificador); "
-                                    "Cubase no devuelve el valor para confirmarlo.")
+        if not crossings:
+            return Result("unverified", f"Pista {track}: paneo girado hacia la {side} ({turned} pasos del codificador); "
+                                        "Cubase no devuelve la posición para confirmarlo.")
+        (t1, r1) = crossings[0]
+        if len(crossings) >= 2:
+            (t2, r2) = crossings[1]
+            per_tick = ((r2 - 10) - (r1 - 10)) / max(1, t2 - t1)
+        else:
+            per_tick = (r1 - 10) / max(1, t1)
+        per_tick = per_tick or 1.0
+        want = t1 + (target - (r1 - 10)) / per_tick
+        back = int(round(turned - want))
+        if back:
+            self.s.vpot(strip, -direction * back)
+            self.s.poll(0.2)
+        ring = self.ring_to_pan(self.s.state.vpot_rings.get(strip))
+        approx = f"; la corona de LEDs marca ~{abs(ring):.0f}" if ring is not None else ""
+        return Result("unverified", f"Pista {track}: paneo {target:.0f} a la {side} (calculado con la corona de LEDs, "
+                                    f"precisión aprox. ±5{approx}). Cubase no envía el valor exacto.", direction * target)
+
