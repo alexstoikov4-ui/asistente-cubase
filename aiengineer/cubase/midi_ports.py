@@ -184,3 +184,63 @@ class LoopbackPair:
 
     def close(self) -> None:
         pass
+
+
+def diagnose(out_name: str, in_name: str, listen_seconds: float = 6.0, say=None) -> list[str]:
+    """Separa los problemas: (1) ¿la aplicación recibe MIDI por el puerto de entrada? (prueba en bucle
+    sobre el propio puerto) y (2) ¿Cubase envía algo por ese puerto mientras el usuario toca Cubase?"""
+    say = say or (lambda s: None)
+    lines = []
+    ports = list_ports()
+    lines.append("Salidas: " + ", ".join(ports["out"]))
+    lines.append("Entradas: " + ", ".join(ports["in"]))
+    try:
+        inp = WinMidiIn(in_name)
+    except MidiUnavailable as e:
+        return lines + [f"✖ No se puede abrir la entrada: {e}"]
+    try:
+        # 1) bucle: escribir en la salida del MISMO puerto de entrada y comprobar que llega
+        try:
+            loop_out = WinMidiOut(in_name)
+            loop_out.send(bytes([0x90, 0x7F, 0x01]))
+            loop_out.send(bytes([0x80, 0x7F, 0x00]))
+            loop_out.send(bytes([0xF0, 0x7D, 0x41, 0x49, 0x45, 0xF7]))
+            got, sysex = 0, False
+            end = time.time() + 1.5
+            while time.time() < end:
+                m = inp.receive(timeout=0.05)
+                if m:
+                    got += 1
+                    sysex = sysex or m[:1] == b"\xf0"
+            loop_out.close()
+            if got:
+                lines.append(f"✔ Prueba de bucle: la aplicación recibe MIDI por '{inp.name}' ({got} mensajes"
+                             f"{', incluido SysEx' if sysex else ', pero NO llegan los SysEx'}).")
+            else:
+                lines.append(f"✖ Prueba de bucle: lo enviado a '{in_name}' no vuelve por su entrada. El puerto "
+                             "virtual no funciona como bucle para esta aplicación.")
+        except MidiUnavailable as e:
+            lines.append(f"• No se pudo hacer la prueba de bucle: {e}")
+        # 2) escuchar a Cubase
+        say(f"Escuchando a Cubase durante {listen_seconds:.0f} s: dale al PLAY o mueve un fader en Cubase…")
+        count, kinds = 0, set()
+        end = time.time() + listen_seconds
+        while time.time() < end:
+            m = inp.receive(timeout=0.05)
+            if m:
+                count += 1
+                kinds.add("SysEx" if m[0] == 0xF0 else {0x90: "notas/LED", 0xE0: "fader", 0xB0: "CC"}.get(m[0] & 0xF0, hex(m[0])))
+        if count:
+            lines.append(f"✔ Cubase envía datos: {count} mensajes ({', '.join(sorted(kinds))}).")
+        else:
+            lines.append("✖ Cubase no ha enviado nada por ese puerto. Revisa en Cubase que Mackie Control tenga "
+                         f"Salida MIDI = '{in_name}', reinicia Cubase y abre un proyecto.")
+    finally:
+        inp.close()
+    try:
+        out = WinMidiOut(out_name)
+        out.close()
+        lines.append(f"✔ La salida '{out_name}' se puede abrir.")
+    except MidiUnavailable as e:
+        lines.append(f"✖ Salida: {e}")
+    return lines

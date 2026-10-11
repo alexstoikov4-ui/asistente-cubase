@@ -303,6 +303,7 @@ class App:
         self.mi_box.pack(side="left", padx=4)
         ttk.Button(row, text="Buscar puertos", command=self._refresh_midi_ports).pack(side="left", padx=4)
         ttk.Button(row, text="Conectar y probar", command=self._midi_connect).pack(side="left")
+        ttk.Button(row, text="Diagnóstico MIDI", command=self._midi_diagnose).pack(side="left", padx=4)
         row2 = ttk.Frame(f)
         row2.pack(fill="x")
         ttk.Label(row2, text="Orden de mezclador:").pack(side="left")
@@ -344,6 +345,21 @@ class App:
             except (MidiUnavailable, OSError) as ex:
                 msg = str(ex)
             self.q.put(("say", self.mx_out, msg))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _midi_diagnose(self):
+        self._save_midi_ports()
+        self.engine.disconnect_mixer()  # liberar los puertos para la prueba
+        self._write(self.mx_out, "Diagnóstico MIDI… (tarda unos 10 segundos)", clear=True)
+        st = self.engine.config.settings
+
+        def work():
+            from ..cubase.midi_ports import diagnose
+            try:
+                lines = diagnose(st.midi_out_port, st.midi_in_port, say=lambda m: self.q.put(("say", self.mx_out, m)))
+            except Exception as ex:  # noqa: BLE001
+                lines = [f"Error en el diagnóstico: {ex}"]
+            self.q.put(("say", self.mx_out, "\n".join(lines)))
         threading.Thread(target=work, daemon=True).start()
 
     def _mixer_order(self):
