@@ -37,6 +37,7 @@ class SurfaceState:
     vpot_rings: dict = field(default_factory=dict)
     online: bool = False
     updates: int = 0
+    received: int = 0  # mensajes recibidos de Cubase, de cualquier tipo
 
     def lcd_row(self, row: int) -> str:
         return "".join(self.lcd[row * 56:(row + 1) * 56])
@@ -122,6 +123,7 @@ class MackieSurface:
         st = self.state
         if not msg:
             return
+        st.received += 1
         b0 = msg[0]
         if msg[:5] == HEADER and len(msg) > 6:
             cmd = msg[5]
@@ -154,9 +156,19 @@ class MackieSurface:
     def is_on(self, kind: str, strip: int) -> bool | None:
         return self.state.leds.get(BTN[kind] + strip)
 
-    def wake(self) -> bool:
-        """Pide a Cubase que refresque la superficie (cambiando de modo) y comprueba que responde."""
-        before = self.state.updates
-        self.press(ASSIGN["pan"])
-        self.poll(0.6)
-        return self.state.updates > before or any(c != " " for c in self.state.lcd)
+    def announce(self):
+        """Saludo de la superficie: algunos hosts ignoran a una superficie que no se ha presentado."""
+        self.out.send(HEADER + bytes([0x01]) + SERIAL + bytes([0, 0, 0, 0, 0xF7]))
+        self.out.send(HEADER + bytes([0x03]) + SERIAL + bytes([0xF7]))
+
+    def wake(self, attempts: int = 3) -> bool:
+        """Se presenta a Cubase, le pide que refresque la superficie y comprueba que responde."""
+        for _ in range(attempts):
+            before = self.state.received
+            self.poll(0.3)  # atender una posible pregunta pendiente del host
+            self.announce()
+            self.press(ASSIGN["pan"])
+            self.poll(1.0)
+            if self.state.received > before or any(c != " " for c in self.state.lcd):
+                return True
+        return False

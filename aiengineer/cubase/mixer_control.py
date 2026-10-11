@@ -71,8 +71,8 @@ class MixerControl:
     def connect(self) -> Result:
         if self.s.wake():
             names = [n for n in self.s.state.track_names() if n]
-            return Result("verified", "Cubase responde por Mackie Control. Pistas visibles: " +
-                          (", ".join(names) if names else "(sin nombres en pantalla)"))
+            return Result("verified", f"Cubase responde por Mackie Control ({self.s.state.received} mensajes). "
+                          "Pistas visibles: " + (", ".join(names) if names else "(sin nombres en pantalla todavía)"))
         return Result("failed", "Cubase no responde. Revisa en Cubase: Dispositivos > Configuración de dispositivos > "
                                 "Mackie Control, con entrada = puerto 'Cubase a AIE' y salida = puerto 'AIE a Cubase'.")
 
