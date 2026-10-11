@@ -218,10 +218,49 @@ class MixerControl:
         for _ in range(max_iter):
             cur = parse_pan(self.s.state.strip_text(strip, 1))
             if cur is None:
-                return Result("unverified", "Cubase no muestra el valor de paneo en la pantalla de la superficie.")
+                return self._pan_by_ring(track, strip, pan)
             if abs(cur - pan) < 0.5:
                 return Result("verified", f"Pista {track}: paneo {self.s.state.strip_text(strip, 1)}.", cur)
             ticks = int(max(-15, min(15, round((pan - cur) / 2))))  # ~2 unidades por paso (se corrige con la lectura)
             self.s.vpot(strip, ticks or (1 if pan > cur else -1))
             self.s.poll(0.2)
         return Result("failed", f"No se alcanzó el paneo {pan} en la pista {track}.")
+
+    @staticmethod
+    def ring_to_pan(value: int | None) -> float | None:
+        """Corona de LEDs del V-pot (11 posiciones, 6 = centro) -> paneo aproximado -100..100."""
+        if value is None:
+            return None
+        pos = value & 0x0F
+        if not 1 <= pos <= 11:
+            return None
+        return (pos - 6) * 20.0
+
+    def _pan_by_ring(self, track: int, strip: int, pan: float) -> Result:
+        """Sin texto en pantalla: se centra el paneo (pulsando el V-pot) y se gira usando la corona de LEDs
+        que Cubase devuelve para saber hacia dónde va. Precisión aproximada (±10)."""
+        self.s.button("vpot", strip)  # en modo PAN, pulsar el codificador lo devuelve al centro
+        self.s.poll(0.3)
+        if abs(pan) < 1:
+            ring = self.ring_to_pan(self.s.state.vpot_rings.get(strip))
+            ok = ring is not None and abs(ring) < 1
+            return Result("verified" if ok else "unverified",
+                          f"Pista {track}: paneo al centro" + (" (confirmado por la corona de LEDs)." if ok else
+                                                               " (sin confirmación de Cubase)."), 0.0)
+        direction = 1 if pan > 0 else -1
+        turned = 0
+        for _ in range(60):
+            self.s.vpot(strip, direction * 2)
+            turned += 2
+            self.s.poll(0.08)
+            ring = self.ring_to_pan(self.s.state.vpot_rings.get(strip))
+            if ring is None and turned >= abs(pan):
+                break
+            if ring is not None and abs(ring) >= abs(pan) - 10:
+                side = "derecha" if pan > 0 else "izquierda"
+                return Result("unverified", f"Pista {track}: paneo hacia la {side}, aprox. {abs(ring):.0f} según la "
+                                            f"corona de LEDs (pedido {abs(pan):.0f}). Cubase no envía el valor exacto.",
+                              ring)
+        side = "derecha" if pan > 0 else "izquierda"
+        return Result("unverified", f"Pista {track}: paneo girado hacia la {side} ({turned} pasos del codificador); "
+                                    "Cubase no devuelve el valor para confirmarlo.")

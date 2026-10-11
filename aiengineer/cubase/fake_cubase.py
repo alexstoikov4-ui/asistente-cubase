@@ -26,7 +26,8 @@ def fake_taper(pos: int) -> float:
 
 
 class FakeCubase:
-    def __init__(self, names: list[str], show_values: bool = True):
+    def __init__(self, names: list[str], show_values: bool = True, send_rings: bool = True):
+        self.send_rings = send_rings
         self.tracks = [FakeTrack(n) for n in names]
         self.to_surface = LoopbackPair()  # lo que la superficie recibe
         self.show_values = show_values
@@ -62,6 +63,11 @@ class FakeCubase:
                 self._toggle("mute", n - BTN["mute"])
             elif BTN["solo"] <= n < BTN["solo"] + 8:
                 self._toggle("solo", n - BTN["solo"])
+            elif BTN["vpot"] <= n < BTN["vpot"] + 8:
+                t = self._track(n - BTN["vpot"])
+                if t:
+                    t.pan = 0.0
+                    self._ring(n - BTN["vpot"])
         elif kind == 0x90 and data[2] == 0 and 0x68 <= data[1] <= 0x6F:
             self.touched.discard(data[1] - 0x68)
             self._refresh()
@@ -72,10 +78,18 @@ class FakeCubase:
                 v = data[2]
                 ticks = -(v & 0x3F) if v & 0x40 else v
                 t.pan = max(-100, min(100, t.pan + ticks))
-                self._lcd_strip(strip, 1, self._pan_text(t.pan))
+                if self.show_values:
+                    self._lcd_strip(strip, 1, self._pan_text(t.pan))
+                self._ring(strip)
 
     def close(self):
         pass
+
+    def _ring(self, strip):
+        t = self._track(strip)
+        if t and self.send_rings:
+            pos = int(round(t.pan / 20.0)) + 6
+            self.to_surface.send(bytes([0xB0, 0x30 + strip, 0x10 | max(1, min(11, pos))]))
 
     def _track(self, strip):
         i = self.bank * 8 + strip
@@ -104,7 +118,8 @@ class FakeCubase:
         for s in range(8):
             t = self._track(s)
             self._lcd_strip(s, 0, t.name if t else "")
-            self._lcd_strip(s, 1, self._pan_text(t.pan) if t else "")
+            if self.show_values:
+                self._lcd_strip(s, 1, self._pan_text(t.pan) if t else "")
             if t:
                 self.to_surface.send(bytes([0x90, BTN["mute"] + s, 0x7F if t.mute else 0]))
                 self.to_surface.send(bytes([0x90, BTN["solo"] + s, 0x7F if t.solo else 0]))

@@ -97,3 +97,12 @@ def test_change_volume_without_display_uses_fader_position(tmp_path):
     r = m.change_volume(1, 3.0)
     assert r.status == "unverified" and "movido" in r.message
     assert cub.tracks[0].db > -999
+
+
+def test_pan_without_display_uses_ring_leds(tmp_path):
+    cub, m = make(show_values=False, tmp_path=tmp_path)
+    cub.tracks[3].pan = -50
+    r = m.set_pan(4, 30)
+    assert r.status == "unverified" and 20 <= cub.tracks[3].pan <= 40
+    r = m.set_pan(4, 0)
+    assert r.status == "verified" and cub.tracks[3].pan == 0
