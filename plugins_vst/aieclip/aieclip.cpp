@@ -68,12 +68,26 @@ enum { effFlagsCanReplacing = 1 << 4, effFlagsCanDoubleReplacing = 1 << 12 };
 static const int32_t kEffectMagic = 0x56737450;  // 'VstP'
 static const int32_t kUniqueId = 0x41494563;     // 'AIEc'
 
-enum Param { kInput = 0, kCeiling, kSoftness, kOversampling, kOutput, kMix, kSafety, kNumParams };
-static const int kOsFactors[5] = {1, 2, 4, 8, 16};
-static const int kTapsPerPhase = 16;  // longitud del filtro por fase (calidad del sobremuestreo)
-// Latencia fija en todos los factores: (L-1)/2 de subida + (L-1)/2 de bajada - (N-1) por tomar la
-// salida en la última fase = L-N = N*(kTapsPerPhase-1) muestras altas = kTapsPerPhase-1 muestras.
-static const int kLatency = kTapsPerPhase - 1;
+enum Param { kInput = 0, kCeiling, kSoftness, kOversampling, kOutput, kMix, kSafety, kDelta, kNumParams };
+static const int kNumOs = 6;
+static const int kOsFactors[kNumOs] = {1, 2, 4, 8, 16, 32};
+
+// Sobremuestreo en cascada de etapas x2 con filtros de media banda (half-band) de fase lineal.
+// La primera etapa es la exigente (banda de paso hasta 20 kHz a 44,1 kHz, ~90 dB de rechazo); las
+// siguientes trabajan a más frecuencia y les basta con filtros cortos. Las longitudes cumplen
+// (L-1)/2 divisible por 2^etapa, así el retardo de cada factor es un número entero de muestras.
+static const int kStages = 5;
+static const int kStageLen[kStages] = {123, 25, 17, 17, 33};
+static const double kKaiserBeta = 9.0;
+static const int kBuf = 128;  // potencia de 2 mayor que cualquier longitud de filtro
+static const int kMask = kBuf - 1;
+// latencia de cada factor = suma de (L-1)/2 / 2^etapa; la del 32x es la mayor y se usa para todos
+static int stageLatency(int stages) {
+    int num = 0;  // en unidades de 1/2^(kStages-1) muestras
+    for (int s = 0; s < stages; ++s) num += ((kStageLen[s] - 1) / 2) << (kStages - 1 - s);
+    return num >> (kStages - 1);
+}
+static const int kLatency = 71;  // = stageLatency(kStages); se comprueba al crear el plugin
 
 static void copyStr(void* dst, const char* src, size_t max) {
     char* d = static_cast<char*>(dst);
@@ -87,36 +101,75 @@ static inline double clipSample(double x, double T, double k) {
     if (k <= 1e-6) return x > T ? T : (x < -T ? -T : x);
     double knee = T * (1.0 - k);
     if (a <= knee) return x;
-    double y = knee + T * k * std::tanh((a - knee) / (T * k));
+    // tanh(z) = 1 - 2/(e^(2z)+1): mismo resultado que std::tanh para z >= 0 y bastante más rápido
+    double y = knee + T * k * (1.0 - 2.0 / (std::exp(2.0 * (a - knee) / (T * k)) + 1.0));
     return x < 0 ? -y : y;
 }
 
-// Filtro paso bajo enventanado (Kaiser) para sobremuestreo x N con L coeficientes.
-static std::vector<double> designLowpass(int N, int L) {
-    std::vector<double> h(L);
-    const double beta = 9.0, pi = 3.14159265358979323846;
-    double cutoff = 0.45 / N;  // en ciclos por muestra a la frecuencia alta (deja margen bajo Nyquist)
-    auto besselI0 = [](double x) {
-        double sum = 1.0, term = 1.0;
-        for (int k = 1; k < 30; ++k) { term *= (x / (2.0 * k)) * (x / (2.0 * k)); sum += term; }
-        return sum;
-    };
-    double i0b = besselI0(beta), sum = 0;
-    for (int i = 0; i < L; ++i) {
-        double m = i - (L - 1) / 2.0;
-        double s = (m == 0) ? 2 * cutoff : std::sin(2 * pi * cutoff * m) / (pi * m);
-        double r = 2.0 * i / (L - 1) - 1.0;
-        double w = besselI0(beta * std::sqrt(std::fmax(0.0, 1 - r * r))) / i0b;
-        h[i] = s * w;
-        sum += h[i];
+// Filtro de media banda (corte en 1/4 de la frecuencia alta) enventanado con Kaiser. En un filtro de
+// media banda la mitad de los coeficientes son cero: una fase es solo el coeficiente central (un retardo)
+// y la otra es densa. Se guarda así para hacer productos escalares contiguos (vectorizables).
+static const int kHist = 64;  // historial por fase (potencia de 2 >= mitad del filtro más largo)
+struct HalfBand {
+    int L = 0, c = 0, pc = 0;    // longitud, índice central y su fase (paridad)
+    double center2 = 0;          // 2*h[c] (subida)
+    double center = 0;           // h[c] (bajada)
+    int centerDelay = 0;         // retardo en muestras bajas del coeficiente central
+    std::vector<double> dense;   // h[q + 2t] con q = 1 - pc
+    std::vector<double> dense2;  // 2*h[q + 2t] (subida)
+
+    void design(int len) {
+        L = len; c = (L - 1) / 2; pc = c % 2;
+        std::vector<double> h(L, 0.0);
+        const double pi = 3.14159265358979323846;
+        auto besselI0 = [](double x) {
+            double sum = 1.0, term = 1.0;
+            for (int k = 1; k < 40; ++k) { term *= (x / (2.0 * k)) * (x / (2.0 * k)); sum += term; }
+            return sum;
+        };
+        double i0b = besselI0(kKaiserBeta), sum = 0;
+        for (int i = 0; i < L; ++i) {
+            int m = i - c;
+            double s = (m == 0) ? 0.5 : ((m % 2 == 0) ? 0.0 : std::sin(pi * m / 2.0) / (pi * m));
+            double r = 2.0 * i / (L - 1) - 1.0;
+            h[i] = s * besselI0(kKaiserBeta * std::sqrt(std::fmax(0.0, 1 - r * r))) / i0b;
+            sum += h[i];
+        }
+        for (auto& v : h) v /= sum;  // ganancia unitaria en continua
+        center = h[c]; center2 = 2.0 * h[c];
+        centerDelay = (c - pc) / 2;
+        dense.clear(); dense2.clear();
+        for (int i = 1 - pc; i < L; i += 2) { dense.push_back(h[i]); dense2.push_back(2.0 * h[i]); }
     }
-    for (auto& v : h) v /= sum;  // ganancia unitaria en continua
-    return h;
+};
+
+// Historial con copia espejo: buf[pos + t] es la muestra de hace t pasos, siempre contigua.
+struct Hist {
+    double buf[2 * kHist];
+    int pos;
+    void clear() { std::memset(buf, 0, sizeof buf); pos = 0; }
+    inline void push(double v) { pos = (pos - 1) & (kHist - 1); buf[pos] = buf[pos + kHist] = v; }
+    inline const double* at() const { return buf + pos; }
+};
+
+static inline double dot(const double* a, const double* b, int n) {
+    double s0 = 0, s1 = 0;
+    int i = 0;
+    for (; i + 1 < n; i += 2) { s0 += a[i] * b[i]; s1 += a[i + 1] * b[i + 1]; }
+    if (i < n) s0 += a[i] * b[i];
+    return s0 + s1;
 }
 
 struct Channel {
-    std::vector<double> upHist, downHist, dryDelay, wetDelay;
-    int upPos = 0, downPos = 0, dryPos = 0, wetPos = 0;
+    Hist up[kStages], down0[kStages], down1[kStages];
+    double dry[kBuf], wet[kBuf];
+    int dryPos, wetPos;
+    void clearFilters() {
+        for (int s = 0; s < kStages; ++s) { up[s].clear(); down0[s].clear(); down1[s].clear(); }
+        std::memset(wet, 0, sizeof wet);
+        wetPos = 0;
+    }
+    void clearAll() { clearFilters(); std::memset(dry, 0, sizeof dry); dryPos = 0; }
 };
 
 class AIEClip {
@@ -125,21 +178,21 @@ public:
     audioMasterCallback host;
     float params[kNumParams];
     double sampleRate = 44100;
-    int osIndex = -1, N = 1, latency = 0;
-    // Filtros de todos los factores calculados al crear el plugin: cambiar el sobremuestreo durante la
-    // reproducción no reserva memoria ni cambia la latencia (no hace falta avisar a Cubase).
-    std::vector<double> filters[5];
-    const double* h = nullptr;  // filtro activo (N*kTapsPerPhase coeficientes)
+    int osIndex = -1, stages = 0, pad = kLatency, latency = kLatency;
+    // Filtros calculados al crear el plugin: cambiar el sobremuestreo durante la reproducción no
+    // reserva memoria ni cambia la latencia (no hace falta avisar a Cubase).
+    HalfBand hb[kStages];
     Channel ch[2];
 
     explicit AIEClip(audioMasterCallback cb) : host(cb) {
         params[kInput] = paramFromInputDb(0.0);
         params[kCeiling] = paramFromCeilingDb(-0.3);
         params[kSoftness] = 0.3f;
-        params[kOversampling] = 0.5f;  // 4x
+        params[kOversampling] = 2.0f / (kNumOs - 1);  // 4x
         params[kOutput] = paramFromOutputDb(0.0);
         params[kMix] = 1.0f;
         params[kSafety] = 1.0f;
+        params[kDelta] = 0.0f;
         fx.magic = kEffectMagic;
         fx.numPrograms = 1;
         fx.numParams = kNumParams;
@@ -148,17 +201,12 @@ public:
         fx.flags = effFlagsCanReplacing | effFlagsCanDoubleReplacing;
         fx.object = this;
         fx.uniqueID = kUniqueId;
-        fx.version = 1000;
+        fx.version = 1100;
         fx.ioRatio = 1.0f;
-        for (int i = 1; i < 5; ++i) filters[i] = designLowpass(kOsFactors[i], kOsFactors[i] * kTapsPerPhase);
-        latency = kLatency;
-        fx.initialDelay = kLatency;
-        for (auto& c : ch) {
-            c.upHist.assign(kTapsPerPhase, 0.0);
-            c.downHist.assign(16 * kTapsPerPhase, 0.0);
-            c.dryDelay.assign(kLatency + 1, 0.0);
-            c.wetDelay.assign(kLatency + 1, 0.0);
-        }
+        for (int s = 0; s < kStages; ++s) hb[s].design(kStageLen[s]);
+        latency = stageLatency(kStages);  // 71: igual a kLatency
+        fx.initialDelay = latency;
+        for (auto& c : ch) c.clearAll();
         configure();
     }
 
@@ -169,63 +217,62 @@ public:
     double inputDb() const { return -12.0 + 36.0 * params[kInput]; }
     double ceilingDb() const { return -24.0 + 24.0 * params[kCeiling]; }
     double outputDb() const { return -24.0 + 36.0 * params[kOutput]; }
-    int osIdx() const { int i = int(params[kOversampling] * 4.0f + 0.5f); return i < 0 ? 0 : (i > 4 ? 4 : i); }
+    int osIdx() const {
+        int i = int(params[kOversampling] * (kNumOs - 1) + 0.5f);
+        return i < 0 ? 0 : (i > kNumOs - 1 ? kNumOs - 1 : i);
+    }
 
-    // Se llama desde el hilo de audio: solo cambia punteros y pone a cero historiales (sin reservar memoria).
+    // Se llama desde el hilo de audio: sin reservar memoria ni llamar al anfitrión.
     void configure() {
         int idx = osIdx();
         if (idx == osIndex) return;
         osIndex = idx;
-        N = kOsFactors[idx];
-        h = (N > 1) ? filters[idx].data() : nullptr;
-        for (auto& c : ch) {
-            std::fill(c.upHist.begin(), c.upHist.end(), 0.0);
-            std::fill(c.downHist.begin(), c.downHist.end(), 0.0);
-            std::fill(c.wetDelay.begin(), c.wetDelay.end(), 0.0);
-            c.upPos = c.downPos = c.wetPos = 0;
-        }
+        stages = idx;  // 2^stages = factor
+        pad = latency - stageLatency(stages);
+        for (auto& c : ch) c.clearFilters();
     }
 
     void reset() {
-        for (auto& c : ch) {
-            std::fill(c.dryDelay.begin(), c.dryDelay.end(), 0.0);
-            c.dryPos = 0;
-        }
+        for (auto& c : ch) c.clearAll();
         osIndex = -1;
         configure();
     }
 
+    // Etapa s: sube x2, procesa las etapas interiores (o recorta en la última) y baja x2.
+    double stage(Channel& c, int s, double x, double T, double k) {
+        if (s == stages) return clipSample(x, T, k);
+        const HalfBand& f = hb[s];
+        const int nd = int(f.dense.size());
+        Hist& uh = c.up[s];
+        uh.push(x);
+        // subida: y[2n+p] = 2 * sum_t h[p+2t] x[n-t]
+        double uc = f.center2 * uh.at()[f.centerDelay];
+        double ud = dot(f.dense2.data(), uh.at(), nd);
+        double u0 = f.pc == 0 ? uc : ud, u1 = f.pc == 0 ? ud : uc;
+        double v0 = stage(c, s + 1, u0, T, k);
+        double v1 = stage(c, s + 1, u1, T, k);
+        // bajada con la muestra par v0[n] como la más reciente: z = sum_i h[i] u[2n-i];
+        // i par -> v0[n - i/2], i impar -> v1[n - 1 - (i-1)/2] (v1[n] aún no ha entrado)
+        Hist& d0 = c.down0[s];
+        Hist& d1 = c.down1[s];
+        d0.push(v0);
+        double z;
+        if (f.pc == 0) z = f.center * d0.at()[f.centerDelay] + dot(f.dense.data(), d1.at(), nd);
+        else z = dot(f.dense.data(), d0.at(), nd) + f.center * d1.at()[f.centerDelay];
+        d1.push(v1);
+        return z;
+    }
+
     // Devuelve la señal procesada; en 'dry' deja la entrada retrasada la misma latencia.
     double processOne(Channel& c, double x, double gin, double T, double k, double& dry) {
-        int D = int(c.dryDelay.size());
-        c.dryDelay[c.dryPos] = x;
-        dry = c.dryDelay[(c.dryPos + D - latency) % D];
-        c.dryPos = (c.dryPos + 1) % D;
-        x *= gin;
-        double y;
-        if (N == 1) {
-            // sin sobremuestreo: se retrasa igual que con filtros para que la latencia sea siempre la misma
-            int W = int(c.wetDelay.size());
-            c.wetDelay[c.wetPos] = clipSample(x, T, k);
-            y = c.wetDelay[(c.wetPos + W - kLatency) % W];
-            c.wetPos = (c.wetPos + 1) % W;
-        } else {
-            // historial de entrada para el filtro polifásico de subida
-            c.upPos = (c.upPos + kTapsPerPhase - 1) % kTapsPerPhase;
-            c.upHist[c.upPos] = x;
-            int L = N * kTapsPerPhase;
-            for (int p = 0; p < N; ++p) {
-                double acc = 0;
-                for (int t = 0; t < kTapsPerPhase; ++t) acc += h[p + t * N] * c.upHist[(c.upPos + t) % kTapsPerPhase];
-                double clipped = clipSample(acc * N, T, k);
-                c.downPos = (c.downPos + L - 1) % L;
-                c.downHist[c.downPos] = clipped;
-            }
-            double acc = 0;  // filtro de bajada y diezmado (una salida cada N muestras)
-            for (int i = 0; i < L; ++i) acc += h[i] * c.downHist[(c.downPos + i) % L];
-            y = acc;
-        }
-        return y;
+        c.dryPos = (c.dryPos + 1) & kMask;
+        c.dry[c.dryPos] = x;
+        dry = c.dry[(c.dryPos - latency) & kMask];
+        double y = stage(c, 0, x * gin, T, k);
+        // los factores más bajos tienen menos retardo: se completa hasta la latencia fija
+        c.wetPos = (c.wetPos + 1) & kMask;
+        c.wet[c.wetPos] = y;
+        return c.wet[(c.wetPos - pad) & kMask];
     }
 
     template <typename T_>
@@ -237,6 +284,7 @@ public:
         double k = params[kSoftness];
         double mix = params[kMix];
         bool safety = params[kSafety] >= 0.5f;
+        bool delta = params[kDelta] >= 0.5f;
         for (int c = 0; c < 2; ++c) {
             for (int32_t i = 0; i < frames; ++i) {
                 double x = in[c][i];
@@ -244,18 +292,19 @@ public:
                 double dry;
                 double wet = processOne(chan, x, gin, T, k, dry);
                 if (safety) wet = wet > T ? T : (wet < -T ? -T : wet);
-                double y = (mix * wet + (1.0 - mix) * dry) * gout;
+                // Delta: escuchar solo lo que el clipper quita (para ajustar Input de oído)
+                double y = delta ? (dry * gin - wet) * gout : (mix * wet + (1.0 - mix) * dry) * gout;
                 out[c][i] = T_(y);
             }
         }
     }
 
     void paramName(int i, char* s) {
-        static const char* n[kNumParams] = {"Input", "Ceiling", "Soft", "OverSmp", "Output", "Mix", "Safety"};
+        static const char* n[kNumParams] = {"Input", "Ceiling", "Soft", "OverSmp", "Output", "Mix", "Safety", "Delta"};
         copyStr(s, i < kNumParams ? n[i] : "", 9);
     }
     void paramLabel(int i, char* s) {
-        static const char* l[kNumParams] = {"dB", "dB", "%", "", "dB", "%", ""};
+        static const char* l[kNumParams] = {"dB", "dB", "%", "", "dB", "%", "", ""};
         copyStr(s, i < kNumParams ? l[i] : "", 9);
     }
     void paramDisplay(int i, char* s) {
@@ -268,6 +317,7 @@ public:
             case kOutput: std::snprintf(b, sizeof b, "%+.1f", outputDb()); break;
             case kMix: std::snprintf(b, sizeof b, "%.0f", params[kMix] * 100.0); break;
             case kSafety: std::snprintf(b, sizeof b, "%s", params[kSafety] >= 0.5f ? "On" : "Off"); break;
+            case kDelta: std::snprintf(b, sizeof b, "%s", params[kDelta] >= 0.5f ? "On" : "Off"); break;
             default: b[0] = 0;
         }
         copyStr(s, b, 9);

@@ -133,3 +133,13 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
 - Solución: latencia fija de 15 muestras en todos los factores, filtros precalculados al cargar, sin
   reservar memoria en el hilo de audio y sin avisos al anfitrión. Nueva prueba: 752 cambios de OverSmp en
   plena reproducción con reinicios intercalados, sin errores (también con AddressSanitizer/UBSan).
+
+### AIE Clip 1.1: calidad de sobremuestreo
+- Medido con `test_host`: la 1.0 perdía 5 dB a 18 kHz y 12,7 dB a 20 kHz con sobremuestreo (filtro de 16
+  coeficientes por fase, banda de transición demasiado ancha).
+- Nuevo sobremuestreo en cascada de etapas x2 de media banda (123/25/17/17/33 coeficientes): respuesta plana
+  (±0,003 dB hasta 20 kHz), nuevo factor 32x, latencia fija 71 muestras, parámetro Delta.
+- tanh calculada con exp (mismo resultado, más rápida) y filtros guardados por fases para productos contiguos:
+  a 4x gasta ~2,5 % de un núcleo frente a ~4,6 % antes de optimizar (medido en Linux x86).
+- `test_host` comprueba ahora respuesta en frecuencia, aliasing por factor y Delta.
+- No comparado directamente con StandardCLIP (no disponible aquí): las cifras son medidas propias.
