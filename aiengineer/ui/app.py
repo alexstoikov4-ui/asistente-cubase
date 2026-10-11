@@ -32,12 +32,27 @@ class App:
         self.worker: threading.Thread | None = None
         self.current_plan: Plan | None = None
         root.title("AI Audio Engineer — Cubase 5")
+        root.report_callback_exception = self._on_ui_error
         root.geometry("1180x780")
         root.minsize(900, 600)
         self._build()
         self._refresh_projects()
         self.root.after(100, self._poll_queue)
         self.root.after(500, self._refresh_cubase_status)
+
+    def _on_ui_error(self, exc, val, tb):
+        """Cualquier error de un botón se muestra y se guarda en el registro (nunca falla en silencio)."""
+        import logging
+        import traceback
+        detail = "".join(traceback.format_exception(exc, val, tb))
+        logging.getLogger("aiengineer.ui").error("Error en la interfaz:\n%s", detail)
+        try:
+            self._write(self.chat, f"⚠ Error: {val}\n(Detalles en la pestaña 'Registro de errores')")
+            if hasattr(self, "mx_out"):
+                self._write(self.mx_out, f"⚠ Error: {val}")
+        except Exception:  # noqa: BLE001
+            pass
+        messagebox.showerror("Error", f"{val}\n\nLos detalles están en la pestaña 'Registro de errores'.")
 
     # ================================================================ construcción
     def _build(self):
@@ -299,6 +314,8 @@ class App:
 
     def _refresh_midi_ports(self):
         from ..cubase.midi_ports import list_ports
+        self._write(self.mx_out, "Buscando puertos MIDI…", clear=True)
+        self.root.update_idletasks()
         ports = list_ports()
         self.mo_box["values"] = ports["out"]
         self.mi_box["values"] = ports["in"]
