@@ -168,3 +168,7 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
   (amarillo/naranja). Ahora: alturas por nivel medio (RMS) con escala automática (máximo reciente al 85 %),
   desplazamiento con el reloj a velocidad constante y corrección lenta (prueba: 7-9 px por imagen frente a
   0-19 px sin suavizar), 50 imágenes por segundo, y color con más peso de la banda dominante.
+- 1.3 (fotos y vídeo de Traktor del usuario): vista Color con mezcla aditiva natural de rojo/verde/azul según
+  cada banda, sin blanco cuando suena todo (el usuario: "cuando suena todo es una mezcla, no blanco"; se quita
+  el componente común para conservar la saturación), altura por pico con escala automática (ocupa casi todo el
+  alto), líneas con brillo según nivel medio/pico, bordes difuminados y línea de "ahora" roja.

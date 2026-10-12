@@ -202,7 +202,7 @@ public:
     double smoothHead = 0, lastNow = -1, burst = 0;
     uint32_t lastWritten = 0;
     // escala automática: el nivel medio más alto de los últimos segundos ocupa ~85 % de la altura
-    double autoRef = 0;
+    double autoRef = 0, autoRefPk = 0;
     float meterLow = 0, meterMid = 0, meterHigh = 0;
     std::vector<uint32_t> background;
     bool dragGain = false;
@@ -218,17 +218,21 @@ public:
 
     bool dragging() const { return dragGain; }
 
-    // color de una columna a partir de las tres bandas (pesos para compensar que los graves dominan)
+    // Color de una columna como en los programas de DJ: mezcla aditiva natural de rojo (graves), verde
+    // (medios) y azul (agudos) según cuánto suena cada banda. Cuando suena todo junto sale una mezcla
+    // (rosa, morado, naranja...), nunca blanco: se conserva la saturación del color.
     static Color bandColor(float lo, float mi, float hi) {
-        double r = lo * 1.0, g = mi * 1.8, b = hi * 3.2;
+        double r = lo * 1.0, g = mi * 1.15, b = hi * 2.4;  // compensa que los graves tienen más energía
         double m = std::max(r, std::max(g, b));
         if (m <= 1e-9) return rgb(90, 90, 110);
         r /= m; g /= m; b /= m;
-        r = r * r * r; g = g * g * g; b = b * b * b;  // realza la banda dominante (colores puros, sin mezclas turbias)
-        // mezcla aditiva de los tres colores de banda
-        double R = r * 255 + g * 40 + b * 40, G = r * 30 + g * 230 + b * 110, B = r * 60 + g * 70 + b * 255;
-        double mm = std::max(R, std::max(G, B)) / 255.0;
-        return rgb(int(R / mm), int(G / mm), int(B / mm));
+        double mn = std::min(r, std::min(g, b));
+        // quita gran parte del componente común (lo que haría gris/blanco) y vuelve a normalizar
+        r -= 0.85 * mn; g -= 0.85 * mn; b -= 0.85 * mn;
+        double mx = std::max(r, std::max(g, b));
+        if (mx <= 1e-6) return rgb(230, 80, 200);  // las tres bandas exactamente iguales: rosa-morado
+        r /= mx; g /= mx; b /= mx;
+        return rgb(int(20 + 235 * r), int(20 + 235 * g), int(30 + 225 * b));
     }
 
     // posición de la vista en columnas (con decimales, para que el paso en píxeles sea uniforme)
@@ -260,11 +264,16 @@ public:
             if (smoothHead > w) smoothHead = w;
         }
         // escala automática con el nivel medio de las columnas nuevas
-        float newMax = 0;
+        float newMax = 0, newPk = 0;
         uint32_t nNew = std::min<uint32_t>(w - lastWritten, kRing - 1);
-        for (uint32_t i = 1; i <= nNew; ++i) newMax = std::max(newMax, p->ring[(w - i) & (kRing - 1)].rms);
+        for (uint32_t i = 1; i <= nNew; ++i) {
+            const Column& c = p->ring[(w - i) & (kRing - 1)];
+            newMax = std::max(newMax, c.rms);
+            newPk = std::max(newPk, c.peak);
+        }
         double decay = std::pow(0.5, (lastNow < 0 ? 0.0 : now - lastNow) / 6.0);  // se reduce a la mitad en 6 s
         autoRef = std::max(double(newMax), std::max(autoRef * decay, 1e-4));
+        autoRefPk = std::max(double(newPk), std::max(autoRefPk * decay, 1e-4));
         lastWritten = w;
         lastNow = now;
         if (p->params[kFreeze] < 0.5f) frozenAt = headF();
@@ -323,6 +332,22 @@ public:
         }
     }
 
+    // Línea vertical con bordes suaves (brillo difuminado) y centro más claro, como en Traktor.
+    void glowColumn(const Rect& r, int x, double amp, Color c, double bright) {
+        int half = r.h / 2, cy = r.y + half;
+        int hh = int(std::min(1.0, amp) * (half - 1) + 0.5);
+        if (hh <= 0) return;
+        Color base = mix(rgb(0, 0, 0), c, std::min(1.0, bright));
+        for (int dy = -hh; dy <= hh; ++dy) {
+            int y = cy + dy;
+            if (y < r.y || y >= r.b()) continue;
+            double t = double(std::abs(dy)) / hh;
+            Color cc = mix(base, rgb(255, 255, 255), 0.06 * (1 - t) * (1 - t) * bright);  // apenas más claro
+            double a = t < 0.72 ? 1.0 : std::max(0.0, (1.0 - t) / 0.28);  // borde difuminado
+            cv.blend(x, y, cc, a * a * (3 - 2 * a));
+        }
+    }
+
     // Une las columnas de audio en barras de ancho fijo ANCLADAS AL TIEMPO ABSOLUTO: la barra k reúne
     // siempre las mismas columnas, así que al avanzar la onda solo se desplaza (no "tiembla").
     struct Bin { float pk, rms, lo, mi, hi; bool valid; };
@@ -346,7 +371,7 @@ public:
         return b;
     }
 
-    void drawWave(const Rect& r, double seconds, bool threeBands, double gain) {
+    void drawWave(const Rect& r, double seconds, bool threeBands, double gain, double gainPk) {
         double hf = headF();
         uint32_t end = uint32_t(hf);
         if (end == 0) return;
@@ -357,9 +382,11 @@ public:
             if (!b.valid) continue;
             int X = r.x + x;
             if (!threeBands) {
+                // altura según el pico (escala automática); el brillo de cada línea según la relación
+                // nivel medio / pico: da la textura de líneas finas de los programas de DJ
                 Color c = bandColor(b.lo, b.mi, b.hi);
-                column(r, X, b.rms * gain, mix(c, rgb(0, 0, 0), 0.4), 0.25);  // contorno: mismo color, más oscuro
-                column(r, X, b.rms * 0.62 * gain, c, 0.1);                     // cuerpo: color pleno
+                double crest = b.pk > 1e-9 ? std::min(1.0, b.rms * 1.6 / b.pk) : 0.0;
+                glowColumn(r, X, b.pk * gainPk, c, 0.55 + 0.45 * crest);
             } else {  // tres ondas superpuestas: graves al fondo, agudos delante
                 column(r, X, b.lo * gain, kLowColor, 0.35);
                 column(r, X, b.mi * gain * 1.4, kMidColor, 0.35);
@@ -372,7 +399,8 @@ public:
         if (background.size() != cv.px.size()) drawBackground();
         else std::copy(background.begin(), background.end(), cv.px.begin());
         // escala: automática (nivel medio máximo reciente al 85 %) más el Gain del usuario
-        double gain = 0.85 / autoRef * std::pow(10.0, p->gainDb() / 20.0);
+        double user = std::pow(10.0, p->gainDb() / 20.0);
+        double gain = 0.85 / autoRef * user, gainPk = 0.95 / autoRefPk * user;
         bool three = p->params[kMode] >= 0.5f;
         double secs = kZoomSeconds[p->zoomIdx()];
 
@@ -413,12 +441,12 @@ public:
             cv.text(kFontSmall, x + 3, wave.y + 3, b, rgb(80, 86, 104));
         }
         cv.fill({wave.x, wave.y + wave.h / 2, wave.w, 1}, rgb(36, 40, 52));
-        drawWave(wave, secs, three, gain);
-        cv.fill({wave.r() - 2, wave.y, 2, wave.h}, fr ? kAccent2 : rgb(240, 240, 250));  // "ahora"
+        drawWave(wave, secs, three, gain, gainPk);
+        cv.fill({wave.r() - 2, wave.y, 2, wave.h}, fr ? kAccent2 : rgb(255, 60, 40));  // "ahora" (rojo, como Traktor)
 
         // resumen inferior (últimos 64 s)
         cv.fill(overview, rgb(8, 9, 13));
-        drawWave(overview, kOverviewSeconds, false, gain);
+        drawWave(overview, kOverviewSeconds, false, gain, gainPk);
         int vx = overview.r() - int(secs / kOverviewSeconds * overview.w);
         cv.fill({vx, overview.y, overview.r() - vx, overview.h}, withAlpha(rgb(255, 255, 255), 22));
         cv.fill({vx, overview.y, 1, overview.h}, withAlpha(rgb(255, 255, 255), 120));
