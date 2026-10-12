@@ -1,0 +1,4 @@
+LIBRARY AIEExciter
+EXPORTS
+    VSTPluginMain
+    main=VSTPluginMain

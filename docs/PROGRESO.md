@@ -184,3 +184,12 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
   tiempo real, límites de correlación por frecuencia, escala de Width como Ozone (-100..+100), Stereoize I/II
   (II decorrelado), Bypass por banda, Link, vectorscopio Polar Sample / Polar Level / Lissajous, controles en
   columnas fijas. Mono intacto probado con los dos modos de Stereoize. 23 parámetros (los 16 de la 1.0 igual).
+
+### AIE Exciter 1.0: excitador armónico multibanda
+- Petición con especificaciones del Exciter de Ozone 11: 4 bandas, 7 perfiles, Mid/Side y Transient/Sustain por
+  banda, Oversampling, Amount y Mix por banda, Delta.
+- Sobremuestreo común en `plugins_vst/common/oversampler.h` (mismas etapas que AIE Clip, hasta x8, latencia 69).
+- Problema encontrado en pruebas: saturar la señal tal cual cambiaba el volumen según el nivel (subía pasajes
+  flojos hasta +18 dB o bajaba los fuertes). Solución: normalizar por la envolvente antes de saturar; ahora el
+  volumen queda a ±0,2 dB en cualquier nivel y los armónicos son proporcionales solo al Amount.
+- Pendiente: probarlo en Cubase 5 real.

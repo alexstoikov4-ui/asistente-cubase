@@ -101,6 +101,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item out32\AIEImager.dll ..\..\dist\AIEImager-32bits.dll
 
+      - name: Compilar y probar el plugin AIE Exciter de 32 bits
+        working-directory: plugins_vst/aieexciter
+        run: |
+          New-Item -ItemType Directory -Force out32 | Out-Null
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aieexciter.cpp /Foout32\ /link /DEF:aieexciter.def /OUT:out32\AIEExciter.dll user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_exciter.cpp /Foout32\ /Feout32\tests_exciter.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out32\tests_exciter.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_exciter_host.c /Foout32\ /Feout32\test_exciter_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out32\test_exciter_host.exe .\out32\AIEExciter.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item out32\AIEExciter.dll ..\..\dist\AIEExciter-32bits.dll
+
       - name: Preparar compilador de C++ (64 bits)
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -157,6 +173,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item out64\AIEImager.dll ..\..\dist\AIEImager-64bits.dll
 
+      - name: Compilar y probar el plugin AIE Exciter de 64 bits
+        working-directory: plugins_vst/aieexciter
+        run: |
+          New-Item -ItemType Directory -Force out64 | Out-Null
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aieexciter.cpp /Foout64\ /link /DEF:aieexciter.def /OUT:out64\AIEExciter.dll user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_exciter.cpp /Foout64\ /Feout64\tests_exciter.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out64\tests_exciter.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_exciter_host.c /Foout64\ /Feout64\test_exciter_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out64\test_exciter_host.exe .\out64\AIEExciter.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item out64\AIEExciter.dll ..\..\dist\AIEExciter-64bits.dll
+
       - name: Guardar artefacto
         uses: actions/upload-artifact@v4
         with:
@@ -170,6 +202,8 @@ jobs:
             dist/AIEScope-64bits.dll
             dist/AIEImager-32bits.dll
             dist/AIEImager-64bits.dll
+            dist/AIEExciter-32bits.dll
+            dist/AIEExciter-64bits.dll
             plugins_vst/aieclip/out32/editor.bmp
 
       - name: Publicar en la página de descargas (Releases)
@@ -189,6 +223,8 @@ jobs:
             con el nombre AIEScope.dll.
             **AIEImager-32bits.dll**: imagen estéreo multibanda (4 bandas: Width 0-200 %, Stereoize, Solo, Mono);
             se instala igual con el nombre AIEImager.dll.
+            **AIEExciter-32bits.dll**: excitador armónico multibanda (7 perfiles, Mid/Side, Transient/Sustain, Delta);
+            se instala igual con el nombre AIEExciter.dll.
             Compilado automáticamente desde el commit ${{ github.sha }}.
           files: |
             dist/AIEngineer.exe
@@ -199,3 +235,5 @@ jobs:
             dist/AIEScope-64bits.dll
             dist/AIEImager-32bits.dll
             dist/AIEImager-64bits.dll
+            dist/AIEExciter-32bits.dll
+            dist/AIEExciter-64bits.dll
