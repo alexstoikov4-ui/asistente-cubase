@@ -31,6 +31,7 @@ static std::vector<float> sine(double f, double a, int n) {
 static double rms(const std::vector<float>& x, int i0, int i1) { double s = 0; for (int i = i0; i < i1; ++i) s += double(x[i]) * x[i]; return std::sqrt(s / (i1 - i0)); }
 
 int main(int argc, char** argv) {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);  // que se vea cada línea aunque algo falle
     const int n = 44100;
     char m[200];
     std::vector<float> oL, oR;

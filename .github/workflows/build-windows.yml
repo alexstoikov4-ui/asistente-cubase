@@ -107,7 +107,7 @@ jobs:
           New-Item -ItemType Directory -Force out32 | Out-Null
           cl /nologo /O2 /EHsc /MT /utf-8 /LD aieexciter.cpp /Foout32\ /link /DEF:aieexciter.def /OUT:out32\AIEExciter.dll user32.lib gdi32.lib
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          cl /nologo /O2 /EHsc /MT /utf-8 tests_exciter.cpp /Foout32\ /Feout32\tests_exciter.exe /link user32.lib gdi32.lib
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_exciter.cpp /Foout32\ /Feout32\tests_exciter.exe /link user32.lib gdi32.lib /STACK:16777216
           if ($LASTEXITCODE -ne 0) { exit 1 }
           .\out32\tests_exciter.exe
           if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -179,7 +179,7 @@ jobs:
           New-Item -ItemType Directory -Force out64 | Out-Null
           cl /nologo /O2 /EHsc /MT /utf-8 /LD aieexciter.cpp /Foout64\ /link /DEF:aieexciter.def /OUT:out64\AIEExciter.dll user32.lib gdi32.lib
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          cl /nologo /O2 /EHsc /MT /utf-8 tests_exciter.cpp /Foout64\ /Feout64\tests_exciter.exe /link user32.lib gdi32.lib
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_exciter.cpp /Foout64\ /Feout64\tests_exciter.exe /link user32.lib gdi32.lib /STACK:16777216
           if ($LASTEXITCODE -ne 0) { exit 1 }
           .\out64\tests_exciter.exe
           if ($LASTEXITCODE -ne 0) { exit 1 }
