@@ -1,0 +1,4 @@
+LIBRARY AIEImager
+EXPORTS
+    VSTPluginMain
+    main=VSTPluginMain

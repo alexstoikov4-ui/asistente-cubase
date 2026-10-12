@@ -85,6 +85,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item out32\AIEScope.dll ..\..\dist\AIEScope-32bits.dll
 
+      - name: Compilar y probar el plugin AIE Imager de 32 bits
+        working-directory: plugins_vst/aieimager
+        run: |
+          New-Item -ItemType Directory -Force out32 | Out-Null
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aieimager.cpp /Foout32\ /link /DEF:aieimager.def /OUT:out32\AIEImager.dll user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_imager.cpp /Foout32\ /Feout32\tests_imager.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out32\tests_imager.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_imager_host.c /Foout32\ /Feout32\test_imager_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out32\test_imager_host.exe .\out32\AIEImager.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item out32\AIEImager.dll ..\..\dist\AIEImager-32bits.dll
+
       - name: Preparar compilador de C++ (64 bits)
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -125,6 +141,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item out64\AIEScope.dll ..\..\dist\AIEScope-64bits.dll
 
+      - name: Compilar y probar el plugin AIE Imager de 64 bits
+        working-directory: plugins_vst/aieimager
+        run: |
+          New-Item -ItemType Directory -Force out64 | Out-Null
+          cl /nologo /O2 /EHsc /MT /utf-8 /LD aieimager.cpp /Foout64\ /link /DEF:aieimager.def /OUT:out64\AIEImager.dll user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /EHsc /MT /utf-8 tests_imager.cpp /Foout64\ /Feout64\tests_imager.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out64\tests_imager.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo /O2 /MT /utf-8 test_imager_host.c /Foout64\ /Feout64\test_imager_host.exe /link user32.lib gdi32.lib
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\out64\test_imager_host.exe .\out64\AIEImager.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item out64\AIEImager.dll ..\..\dist\AIEImager-64bits.dll
+
       - name: Guardar artefacto
         uses: actions/upload-artifact@v4
         with:
@@ -136,6 +168,8 @@ jobs:
             dist/AIEClip-64bits.dll
             dist/AIEScope-32bits.dll
             dist/AIEScope-64bits.dll
+            dist/AIEImager-32bits.dll
+            dist/AIEImager-64bits.dll
             plugins_vst/aieclip/out32/editor.bmp
 
       - name: Publicar en la página de descargas (Releases)
@@ -153,6 +187,8 @@ jobs:
             de Cubase, renómbralo a AIEClip.dll y reinicia Cubase). `AIEClip-64bits.dll` es para DAWs de 64 bits.
             **AIEScope-32bits.dll**: onda en color por bandas (graves rojo, medios verde, agudos azul); se instala igual
             con el nombre AIEScope.dll.
+            **AIEImager-32bits.dll**: imagen estéreo multibanda (4 bandas: Width 0-200 %, Stereoize, Solo, Mono);
+            se instala igual con el nombre AIEImager.dll.
             Compilado automáticamente desde el commit ${{ github.sha }}.
           files: |
             dist/AIEngineer.exe
@@ -161,3 +197,5 @@ jobs:
             dist/AIEClip-64bits.dll
             dist/AIEScope-32bits.dll
             dist/AIEScope-64bits.dll
+            dist/AIEImager-32bits.dll
+            dist/AIEImager-64bits.dll

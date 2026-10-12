@@ -172,3 +172,11 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
   cada banda, sin blanco cuando suena todo (el usuario: "cuando suena todo es una mezcla, no blanco"; se quita
   el componente común para conservar la saturación), altura por pico con escala automática (ocupa casi todo el
   alto), líneas con brillo según nivel medio/pico, bordes difuminados y línea de "ahora" roja.
+
+### AIE Imager 1.0: imagen estéreo multibanda
+- Petición: "estéreo multibanda como el de iZotope 11, que se pueda poner en mono y abrir estéreo en cada banda".
+- 4 bandas (cortes arrastrables), Width 0–200 %, Stereoize por banda, Solo, Mono, correlación por banda y total,
+  vectorscopio. Mid/Side: la suma mono no cambia nunca (probado con ajustes extremos, error 1e-7).
+- Primer intento con bandas por resta: separación pobre (Width 200 % daba x1,41); se cambió a árbol LR4 con
+  compensación de fase (x1,94, Width 0 % deja la banda en mono con lateral residual -38 dB).
+- Pendiente: probarlo en Cubase 5 real.
