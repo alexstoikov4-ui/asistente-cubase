@@ -56,7 +56,7 @@ struct LR4 {
     void clear() { a.clear(); b.clear(); }
 };
 
-struct Column { float peak, low, mid, high; };
+struct Column { float peak, rms, low, mid, high; };
 
 class AIEScope {
 public:
@@ -69,12 +69,15 @@ public:
     LR4 lowLp, midHp, midLp, highHp;
     int colCount = 0;
     float accPeak = 0, accLow = 0, accMid = 0, accHigh = 0;
+    double accSq = 0;
+    // envolventes: suben al instante y bajan en ~12 ms -> contorno suave y estable (sin "peine")
+    double envPeak = 0, envLow = 0, envMid = 0, envHigh = 0, envSq = 0, rel = 0.998, rmsCoef = 0.002;
     // búfer circular: el audio escribe y avanza 'written'; la interfaz lee hasta 'written'
     std::vector<Column> ring;
     std::atomic<uint32_t> written;
     void* window = nullptr;
 
-    explicit AIEScope(audioMasterCallback cb) : host(cb), ring(kRing, Column{0, 0, 0, 0}) {
+    explicit AIEScope(audioMasterCallback cb) : host(cb), ring(kRing, Column{0, 0, 0, 0, 0}) {
         written = 0;
         params[kZoom] = 1.0f / (kNumZoom - 1);  // 4 s
         params[kGain] = 0.0f;                   // 0 dB
@@ -100,6 +103,8 @@ public:
     void setSampleRate(double fs) {
         sampleRate = fs > 0 ? fs : 44100;
         colLen = std::max(16, int(std::lround(sampleRate * kColumnSeconds)));
+        rel = std::exp(-1.0 / (0.012 * sampleRate));
+        rmsCoef = 1.0 - std::exp(-1.0 / (0.010 * sampleRate));
         lowLp.design(false, kLowCut, sampleRate);
         midHp.design(true, kLowCut, sampleRate);
         midLp.design(false, kHighCut, sampleRate);
@@ -110,6 +115,8 @@ public:
         lowLp.clear(); midHp.clear(); midLp.clear(); highHp.clear();
         colCount = 0;
         accPeak = accLow = accMid = accHigh = 0;
+        accSq = 0;
+        envPeak = envLow = envMid = envHigh = envSq = 0;
     }
     double columnsPerSecond() const { return sampleRate / colLen; }
     int zoomIdx() const { int z = int(params[kZoom] * (kNumZoom - 1) + 0.5f); return std::min(kNumZoom - 1, std::max(0, z)); }
@@ -123,16 +130,23 @@ public:
             out[1][i] = T(r);
             double x = 0.5 * (l + r);
             double lo = lowLp.run(x), mi = midLp.run(midHp.run(x)), hi = highHp.run(x);
-            accPeak = std::max(accPeak, float(std::max(std::fabs(l), std::fabs(r))));
-            accLow = std::max(accLow, float(std::fabs(lo)));
-            accMid = std::max(accMid, float(std::fabs(mi)));
-            accHigh = std::max(accHigh, float(std::fabs(hi)));
+            envPeak = std::max(std::max(std::fabs(l), std::fabs(r)), envPeak * rel);
+            envLow = std::max(std::fabs(lo), envLow * rel);
+            envMid = std::max(std::fabs(mi), envMid * rel);
+            envHigh = std::max(std::fabs(hi), envHigh * rel);
+            envSq += rmsCoef * (x * x - envSq);
+            accPeak = std::max(accPeak, float(envPeak));
+            accSq += envSq;
+            accLow = std::max(accLow, float(envLow));
+            accMid = std::max(accMid, float(envMid));
+            accHigh = std::max(accHigh, float(envHigh));
             if (++colCount >= colLen) {
                 uint32_t w = written.load(std::memory_order_relaxed);
-                ring[w & (kRing - 1)] = Column{accPeak, accLow, accMid, accHigh};
+                ring[w & (kRing - 1)] = Column{accPeak, float(std::sqrt(accSq / colLen)), accLow, accMid, accHigh};
                 written.store(w + 1, std::memory_order_release);
                 colCount = 0;
                 accPeak = accLow = accMid = accHigh = 0;
+                accSq = 0;
             }
         }
     }
@@ -202,7 +216,7 @@ public:
         r /= m; g /= m; b /= m;
         r *= r; g *= g; b *= b;  // realza la banda dominante (colores más puros, como en los programas de DJ)
         // mezcla aditiva de los tres colores de banda
-        double R = r * 255 + g * 60 + b * 50, G = r * 40 + g * 235 + b * 120, B = r * 60 + g * 90 + b * 255;
+        double R = r * 255 + g * 40 + b * 40, G = r * 30 + g * 230 + b * 110, B = r * 60 + g * 70 + b * 255;
         double mm = std::max(R, std::max(G, B)) / 255.0;
         return rgb(int(R / mm), int(G / mm), int(B / mm));
     }
@@ -251,41 +265,62 @@ public:
         background = cv.px;
     }
 
-    // dibuja una columna vertical simétrica alrededor del centro
-    void column(const Rect& r, int x, double amp, Color c) {
+    // Columna sólida simétrica alrededor del centro (sin transparencias: bordes nítidos como en los
+    // programas de DJ). 'edge' oscurece un poco hacia el borde para dar volumen.
+    void column(const Rect& r, int x, double amp, Color c, double edge = 0.35) {
         int half = r.h / 2, cy = r.y + half;
         int hh = int(std::min(1.0, amp) * (half - 1) + 0.5);
-        if (hh <= 0) { cv.blend(x, cy, withAlpha(c, 120)); return; }
+        if (hh <= 0) return;
+        uint32_t* px = cv.px.data();
         for (int dy = -hh; dy <= hh; ++dy) {
-            double t = double(std::abs(dy)) / hh;               // 0 en el centro, 1 en el borde
-            Color cc = mix(c, rgb(255, 255, 255), 0.14 * (1 - t) * (1 - t));  // núcleo algo más claro
-            cv.blend(x, cy + dy, withAlpha(cc, int(255 * (0.55 + 0.45 * (1 - t * t)))));
+            int y = cy + dy;
+            if (y < r.y || y >= r.b()) continue;
+            double t = double(std::abs(dy)) / hh;
+            Color cc = mix(c, rgb(0, 0, 0), edge * t * t);
+            px[size_t(y) * cv.w + x] = cc & 0x00FFFFFF;
         }
     }
 
-    // Agrega las columnas que caen en cada píxel (máximos) y pinta la onda en el rectángulo.
+    // Une las columnas de audio en barras de ancho fijo ANCLADAS AL TIEMPO ABSOLUTO: la barra k reúne
+    // siempre las mismas columnas, así que al avanzar la onda solo se desplaza (no "tiembla").
+    struct Bin { float pk, rms, lo, mi, hi; bool valid; };
+    Bin binAt(uint32_t end, double perPx, long k) {
+        Bin b = {0, 0, 0, 0, 0, false};
+        if (k < 0) return b;
+        uint32_t from = uint32_t(std::ceil(k * perPx)), to = uint32_t(std::ceil((k + 1) * perPx));
+        if (to <= from) to = from + 1;
+        uint32_t oldest = end > kRing - 1 ? end - (kRing - 1) : 0;
+        if (from < oldest) return b;
+        to = std::min(to, end);
+        double sq = 0;
+        for (uint32_t c = from; c < to; ++c) {
+            const Column& col = p->ring[c & (kRing - 1)];
+            b.pk = std::max(b.pk, col.peak); b.lo = std::max(b.lo, col.low);
+            b.mi = std::max(b.mi, col.mid); b.hi = std::max(b.hi, col.high);
+            sq += double(col.rms) * col.rms;
+            b.valid = true;
+        }
+        if (b.valid) b.rms = float(std::sqrt(sq / (to - from)));
+        return b;
+    }
+
     void drawWave(const Rect& r, double seconds, bool threeBands, double gain) {
         uint32_t end = head();
-        double cps = p->columnsPerSecond();
-        double perPx = seconds * cps / r.w;
-        uint32_t avail = std::min<uint32_t>(end, kRing - 1);
+        if (end == 0) return;
+        double perPx = seconds * p->columnsPerSecond() / r.w;
+        long last = long(std::floor((end - 1) / perPx));  // barra que contiene la columna más reciente
         for (int x = 0; x < r.w; ++x) {
-            // la columna más reciente queda a la derecha
-            double a = (r.w - x) * perPx, b = (r.w - x - 1) * perPx;
-            uint32_t from = uint32_t(b), to = std::max(uint32_t(a), from + 1);
-            if (from >= avail) continue;
-            to = std::min(to, avail);
-            float pk = 0, lo = 0, mi = 0, hi = 0;
-            for (uint32_t k = from; k < to; ++k) {
-                const Column& c = p->ring[(end - 1 - k) & (kRing - 1)];
-                pk = std::max(pk, c.peak); lo = std::max(lo, c.low); mi = std::max(mi, c.mid); hi = std::max(hi, c.high);
-            }
+            Bin b = binAt(end, perPx, last - (r.w - 1 - x));
+            if (!b.valid) continue;
+            int X = r.x + x;
             if (!threeBands) {
-                column(r, r.x + x, pk * gain, bandColor(lo, mi, hi));
+                Color c = bandColor(b.lo, b.mi, b.hi);
+                column(r, X, b.pk * gain, mix(c, rgb(0, 0, 0), 0.45), 0.25);  // pico: mismo color, más oscuro
+                column(r, X, b.rms * 1.9 * gain, c, 0.12);                     // cuerpo (RMS): color pleno
             } else {  // tres ondas superpuestas: graves al fondo, agudos delante
-                column(r, r.x + x, lo * gain, withAlpha(kLowColor, 230));
-                column(r, r.x + x, mi * gain * 1.25, withAlpha(kMidColor, 200));
-                column(r, r.x + x, hi * gain * 1.8, withAlpha(kHighColor, 210));
+                column(r, X, b.lo * gain, kLowColor, 0.35);
+                column(r, X, b.mi * gain * 1.25, kMidColor, 0.35);
+                column(r, X, b.hi * gain * 1.8, kHighColor, 0.25);
             }
         }
     }

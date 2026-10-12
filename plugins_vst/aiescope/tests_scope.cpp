@@ -99,6 +99,25 @@ int main(int argc, char** argv) {
         p.run(bi, out, block);
         if ((pos / block) % 3 == 0) ed.tick();
     }
+    // la onda no "tiembla": al avanzar, cada barra ya completa conserva exactamente sus valores
+    {
+        bool stable = true;
+        for (int z = 0; z < kNumZoom; ++z) {
+            double perPx = kZoomSeconds[z] * p.columnsPerSecond() / ed.wave.w;
+            uint32_t endA = p.written.load();
+            std::vector<gui::ScopeEditor::Bin> A;
+            long lastA = long(std::floor((endA - 1) / perPx));
+            for (long k = lastA - 700; k < lastA; ++k) A.push_back(ed.binAt(endA, perPx, k));
+            float* bi[2] = {bl.data(), br.data()};
+            for (int b2 = 0; b2 < 3; ++b2) p.run(bi, out, block);  // avanza ~1 fotograma
+            uint32_t endB = p.written.load();
+            for (long k = lastA - 700, i = 0; k < lastA; ++k, ++i) {
+                gui::ScopeEditor::Bin b = ed.binAt(endB, perPx, k);
+                stable = stable && b.pk == A[i].pk && b.rms == A[i].rms && b.lo == A[i].lo && b.hi == A[i].hi;
+            }
+        }
+        CHECK(stable, "al avanzar, las barras ya dibujadas no cambian (la onda solo se desplaza)");
+    }
     auto t0 = std::chrono::steady_clock::now();
     for (int i = 0; i < 20; ++i) ed.draw();
     double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() / 20;

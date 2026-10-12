@@ -159,3 +159,7 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
   vistas Color y 3 bandas, zoom 2–16 s, Gain, Freeze, resumen de 64 s y medidores por banda.
 - Código común en `plugins_vst/common/` (lienzo, letras, VST2 mínimo, ventana de Windows reutilizable).
 - Pendiente: probarlo en Cubase 5 real.
+- 1.1: el usuario vio que la onda "temblaba" y se veía turbia al avanzar. Causas: las columnas se repartían en
+  píxeles contando desde "ahora" (cada fotograma agrupaba distinto) y el pico crudo de 3 ms dibujaba un peine.
+  Ahora las barras están ancladas al tiempo absoluto (prueba: al avanzar, las barras ya dibujadas no cambian),
+  envolventes con caída de 12 ms y dibujo sólido de dos capas (pico oscuro + RMS en color pleno).
