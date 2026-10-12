@@ -1,7 +1,7 @@
 // Ventana de editor para Windows reutilizable: crea una ventana hija de la que da el anfitrión, copia el
 // lienzo (gui::Canvas) a pantalla ~30 veces por segundo y pasa el ratón al editor.
 //
-// El editor (clase Ed) debe tener: gui::Canvas cv; static const int W, H; void tick(); void draw();
+// El editor (clase Ed) debe tener: gui::Canvas cv; static const int W, H, kFrameMs; void tick(); void draw();
 // bool mouseDown(int x, int y, bool dbl, bool fine, int sx, int sy); bool mouseMove(int x, int y, bool fine);
 // bool mouseUp(); bool wheel(int x, int y, int steps, bool fine); bool dragging() const;
 // y un miembro 'int (*menu)(void* ctx, int x, int y, const std::vector<std::string>&, int)' con 'void* menuCtx'
@@ -106,7 +106,7 @@ private:
             case WM_CREATE: {
                 CREATESTRUCTA* cs = reinterpret_cast<CREATESTRUCTA*>(lp);
                 SetWindowLongPtrA(h, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
-                SetTimer(h, 1, 33, nullptr);
+                SetTimer(h, 1, Ed::kFrameMs, nullptr);
                 return 0;
             }
             case WM_TIMER:

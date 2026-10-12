@@ -163,3 +163,8 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
   píxeles contando desde "ahora" (cada fotograma agrupaba distinto) y el pico crudo de 3 ms dibujaba un peine.
   Ahora las barras están ancladas al tiempo absoluto (prueba: al avanzar, las barras ya dibujadas no cambian),
   envolventes con caída de 12 ms y dibujo sólido de dos capas (pico oscuro + RMS en color pleno).
+- 1.2 (vídeo del usuario en Cubase): con su master la onda llenaba toda la altura (picos siempre cerca de 0 dB),
+  avanzaba a tirones (Cubase entrega el audio a trozos según el búfer) y los colores salían mezclados
+  (amarillo/naranja). Ahora: alturas por nivel medio (RMS) con escala automática (máximo reciente al 85 %),
+  desplazamiento con el reloj a velocidad constante y corrección lenta (prueba: 7-9 px por imagen frente a
+  0-19 px sin suavizar), 50 imágenes por segundo, y color con más peso de la banda dominante.

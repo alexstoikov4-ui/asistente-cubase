@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -131,15 +132,17 @@ public:
             double x = 0.5 * (l + r);
             double lo = lowLp.run(x), mi = midLp.run(midHp.run(x)), hi = highHp.run(x);
             envPeak = std::max(std::max(std::fabs(l), std::fabs(r)), envPeak * rel);
-            envLow = std::max(std::fabs(lo), envLow * rel);
-            envMid = std::max(std::fabs(mi), envMid * rel);
-            envHigh = std::max(std::fabs(hi), envHigh * rel);
+            // bandas: nivel medio (RMS ~10 ms), como los programas de DJ; con el pico, un master
+            // comprimido llena toda la altura y se pierde la forma
+            envLow += rmsCoef * (lo * lo - envLow);
+            envMid += rmsCoef * (mi * mi - envMid);
+            envHigh += rmsCoef * (hi * hi - envHigh);
             envSq += rmsCoef * (x * x - envSq);
             accPeak = std::max(accPeak, float(envPeak));
             accSq += envSq;
-            accLow = std::max(accLow, float(envLow));
-            accMid = std::max(accMid, float(envMid));
-            accHigh = std::max(accHigh, float(envHigh));
+            accLow = std::max(accLow, float(std::sqrt(envLow)));
+            accMid = std::max(accMid, float(std::sqrt(envMid)));
+            accHigh = std::max(accHigh, float(std::sqrt(envHigh)));
             if (++colCount >= colLen) {
                 uint32_t w = written.load(std::memory_order_relaxed);
                 ring[w & (kRing - 1)] = Column{accPeak, float(std::sqrt(accSq / colLen)), accLow, accMid, accHigh};
@@ -185,6 +188,7 @@ static const Color kLowColor = rgb(255, 40, 60), kMidColor = rgb(60, 235, 90), k
 class ScopeEditor {
 public:
     static const int W = 900, H = 372;
+    static const int kFrameMs = 20;  // 50 imágenes por segundo: desplazamiento fluido
     Canvas cv;
     AIEScope* p;
     int (*menu)(void*, int, int, const std::vector<std::string>&, int) = nullptr;
@@ -192,7 +196,13 @@ public:
 
     Rect wave = {12, 100, 800, 184}, meters = {824, 100, 64, 184}, overview = {12, 300, 876, 56};
     Rect btnZoom[kNumZoom], btnMode[2], gainTrack = {560, 62, 140, 24}, tglFreeze = {796, 60, 92, 28};
-    uint32_t frozenAt = 0;
+    double frozenAt = 0;
+    // desplazamiento suave: Cubase entrega el audio a trozos (según el búfer de la tarjeta); la vista avanza
+    // con el reloj a velocidad constante, un poco por detrás de lo recibido, y se corrige con suavidad
+    double smoothHead = 0, lastNow = -1, burst = 0;
+    uint32_t lastWritten = 0;
+    // escala automática: el nivel medio más alto de los últimos segundos ocupa ~85 % de la altura
+    double autoRef = 0;
     float meterLow = 0, meterMid = 0, meterHigh = 0;
     std::vector<uint32_t> background;
     bool dragGain = false;
@@ -214,18 +224,50 @@ public:
         double m = std::max(r, std::max(g, b));
         if (m <= 1e-9) return rgb(90, 90, 110);
         r /= m; g /= m; b /= m;
-        r *= r; g *= g; b *= b;  // realza la banda dominante (colores más puros, como en los programas de DJ)
+        r = r * r * r; g = g * g * g; b = b * b * b;  // realza la banda dominante (colores puros, sin mezclas turbias)
         // mezcla aditiva de los tres colores de banda
         double R = r * 255 + g * 40 + b * 40, G = r * 30 + g * 230 + b * 110, B = r * 60 + g * 70 + b * 255;
         double mm = std::max(R, std::max(G, B)) / 255.0;
         return rgb(int(R / mm), int(G / mm), int(B / mm));
     }
 
-    uint32_t head() const { return p->params[kFreeze] >= 0.5f ? frozenAt : p->written.load(std::memory_order_acquire); }
+    // posición de la vista en columnas (con decimales, para que el paso en píxeles sea uniforme)
+    double headF() const {
+        if (p->params[kFreeze] >= 0.5f) return frozenAt;
+        return lastNow < 0 ? double(p->written.load(std::memory_order_acquire)) : std::max(0.0, smoothHead);
+    }
+    uint32_t head() const { return uint32_t(headF()); }
 
-    void tick() {
+    static double nowSeconds() {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    void tick() { tick(nowSeconds()); }
+
+    void tick(double now) {
         uint32_t w = p->written.load(std::memory_order_acquire);
-        if (p->params[kFreeze] < 0.5f) frozenAt = w;
+        double cps = p->columnsPerSecond();
+        if (lastNow < 0 || now - lastNow > 1.0) {  // primera vez o tras una pausa larga
+            smoothHead = w;
+            burst = 0;
+        } else {
+            double dt = now - lastNow;
+            burst = std::max(burst * 0.995, double(w - lastWritten));  // tamaño de los trozos que llegan
+            double target = double(w) - burst - cps * 0.01;
+            smoothHead += dt * cps;
+            double err = target - smoothHead;
+            if (std::fabs(err) > cps * 0.5) smoothHead = target;  // salto grande (parada, cambio de posición)
+            else smoothHead += err * 0.015;  // corrección lenta: los trozos de audio no producen tirones
+            if (smoothHead > w) smoothHead = w;
+        }
+        // escala automática con el nivel medio de las columnas nuevas
+        float newMax = 0;
+        uint32_t nNew = std::min<uint32_t>(w - lastWritten, kRing - 1);
+        for (uint32_t i = 1; i <= nNew; ++i) newMax = std::max(newMax, p->ring[(w - i) & (kRing - 1)].rms);
+        double decay = std::pow(0.5, (lastNow < 0 ? 0.0 : now - lastNow) / 6.0);  // se reduce a la mitad en 6 s
+        autoRef = std::max(double(newMax), std::max(autoRef * decay, 1e-4));
+        lastWritten = w;
+        lastNow = now;
+        if (p->params[kFreeze] < 0.5f) frozenAt = headF();
         // medidores de banda: máximo de los últimos ~100 ms con caída suave
         float lo = 0, mi = 0, hi = 0;
         int n = std::min<uint32_t>(w, uint32_t(p->columnsPerSecond() * 0.1));
@@ -305,22 +347,23 @@ public:
     }
 
     void drawWave(const Rect& r, double seconds, bool threeBands, double gain) {
-        uint32_t end = head();
+        double hf = headF();
+        uint32_t end = uint32_t(hf);
         if (end == 0) return;
         double perPx = seconds * p->columnsPerSecond() / r.w;
-        long last = long(std::floor((end - 1) / perPx));  // barra que contiene la columna más reciente
+        long last = long(std::floor((hf - 1) / perPx));  // barra de la posición actual
         for (int x = 0; x < r.w; ++x) {
             Bin b = binAt(end, perPx, last - (r.w - 1 - x));
             if (!b.valid) continue;
             int X = r.x + x;
             if (!threeBands) {
                 Color c = bandColor(b.lo, b.mi, b.hi);
-                column(r, X, b.pk * gain, mix(c, rgb(0, 0, 0), 0.45), 0.25);  // pico: mismo color, más oscuro
-                column(r, X, b.rms * 1.9 * gain, c, 0.12);                     // cuerpo (RMS): color pleno
+                column(r, X, b.rms * gain, mix(c, rgb(0, 0, 0), 0.4), 0.25);  // contorno: mismo color, más oscuro
+                column(r, X, b.rms * 0.62 * gain, c, 0.1);                     // cuerpo: color pleno
             } else {  // tres ondas superpuestas: graves al fondo, agudos delante
                 column(r, X, b.lo * gain, kLowColor, 0.35);
-                column(r, X, b.mi * gain * 1.25, kMidColor, 0.35);
-                column(r, X, b.hi * gain * 1.8, kHighColor, 0.25);
+                column(r, X, b.mi * gain * 1.4, kMidColor, 0.35);
+                column(r, X, b.hi * gain * 2.2, kHighColor, 0.25);
             }
         }
     }
@@ -328,7 +371,8 @@ public:
     void draw() {
         if (background.size() != cv.px.size()) drawBackground();
         else std::copy(background.begin(), background.end(), cv.px.begin());
-        double gain = std::pow(10.0, p->gainDb() / 20.0);
+        // escala: automática (nivel medio máximo reciente al 85 %) más el Gain del usuario
+        double gain = 0.85 / autoRef * std::pow(10.0, p->gainDb() / 20.0);
         bool three = p->params[kMode] >= 0.5f;
         double secs = kZoomSeconds[p->zoomIdx()];
 
@@ -419,7 +463,7 @@ public:
     }
     void toggleFreeze() {
         bool on = p->params[kFreeze] < 0.5f;
-        if (on) frozenAt = p->written.load(std::memory_order_acquire);  // se congela en el instante del clic
+        if (on) frozenAt = headF();  // se congela tal como se ve en ese instante
         p->setParamFromEditor(kFreeze, on ? 1.0f : 0.0f);
     }
     bool mouseMove(int x, int, bool fine) {

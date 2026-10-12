@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
         int best = int(std::max_element(bands, bands + 3) - bands);
         char msg[160];
         std::snprintf(msg, sizeof msg, "%s (graves %.2f, medios %.2f, agudos %.2f)", c.name, bands[0], bands[1], bands[2]);
-        CHECK(best == c.band && bands[c.band] > 0.4f, msg);
+        CHECK(best == c.band && bands[c.band] > 0.3f, msg);  // nivel medio de un seno de 0,5 = 0,354
     }
 
     // 3) ritmo del búfer: ~345 columnas por segundo a 44,1 kHz y 48 kHz
@@ -93,6 +93,8 @@ int main(int argc, char** argv) {
     p.setSampleRate(44100);
     std::vector<float> bl, br;
     beat(bl, br, 44100, 20.0);
+    // como un master comercial: ganancia alta y saturación (picos siempre cerca de 0 dB)
+    for (size_t i = 0; i < bl.size(); ++i) { bl[i] = std::tanh(bl[i] * 3.0f) * 0.98f; br[i] = std::tanh(br[i] * 3.0f) * 0.98f; }
     gui::ScopeEditor ed(&p);
     for (size_t pos = 0; pos + block <= bl.size(); pos += block) {
         float* bi[2] = {bl.data() + pos, br.data() + pos};
@@ -117,6 +119,36 @@ int main(int argc, char** argv) {
             }
         }
         CHECK(stable, "al avanzar, las barras ya dibujadas no cambian (la onda solo se desplaza)");
+    }
+    // avance fluido: Cubase entrega el audio a trozos de 2048 muestras (cada 46 ms) y la pantalla se
+    // redibuja cada 20 ms; el desplazamiento por imagen debe ser casi constante (sin tirones)
+    {
+        AIEScope q(hostCb);
+        q.setSampleRate(44100);
+        gui::ScopeEditor e2(&q);
+        std::vector<float> zl(2048, 0.1f), zr(2048, 0.1f), o1(2048), o2(2048);
+        float* zi[2] = {zl.data(), zr.data()};
+        float* zo[2] = {o1.data(), o2.data()};
+        double perPx = 2.0 * q.columnsPerSecond() / e2.wave.w;  // zoom 2 s
+        double tAudio = 0, tFrame = 0;
+        long prev = -1;
+        int minStep = 1 << 30, maxStep = 0, rawMin = 1 << 30, rawMax = 0;
+        long prevRaw = -1;
+        for (int f = 0; f < 400; ++f) {
+            tFrame += 0.020;
+            while (tAudio + 2048 / 44100.0 <= tFrame) { q.run(zi, zo, 2048); tAudio += 2048 / 44100.0; }
+            e2.tick(tFrame);
+            long bin = long(std::floor((e2.headF() - 1) / perPx));
+            long raw = long(std::floor((q.written.load() - 1) / perPx));
+            if (f > 100) {  // tras estabilizarse
+                minStep = std::min<long>(minStep, bin - prev); maxStep = std::max<long>(maxStep, bin - prev);
+                rawMin = std::min<long>(rawMin, raw - prevRaw); rawMax = std::max<long>(rawMax, raw - prevRaw);
+            }
+            prev = bin; prevRaw = raw;
+        }
+        char m2[160];
+        std::snprintf(m2, sizeof m2, "avance por imagen %d-%d px (sin suavizar seria %d-%d px)", minStep, maxStep, rawMin, rawMax);
+        CHECK(maxStep - minStep <= 2 && minStep > 0 && rawMax - rawMin > 10, m2);  // ±1 px por redondeo
     }
     auto t0 = std::chrono::steady_clock::now();
     for (int i = 0; i < 20; ++i) ed.draw();
