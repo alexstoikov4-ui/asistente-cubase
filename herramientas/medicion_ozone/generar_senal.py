@@ -1,24 +1,20 @@
-"""Genera senal_prueba_ozone.wav: señal de medición para comparar AIE Exciter / AIE Imager con Ozone.
+"""Genera senal_prueba_ozone.wav y su mapa senal_prueba_ozone.json.
 
-Estéreo, 44,1 kHz, 32 bits coma flotante, 50 s. Tramos (los tiempos los usa el analizador):
-  1,0 s        impulso (latencia y fase)
-  2-6 s        seno 100 Hz a -24, -12, -6 y 0 dBFS (1 s cada nivel)
-  7-11 s       seno 1 kHz a los mismos niveles
-  12-16 s      seno 5 kHz a los mismos niveles
-  17-27 s      barrido logarítmico 20 Hz - 20 kHz a -12 dBFS
-  28-32 s      golpes de batería sintéticos (transitorios)
-  33-36 s      ruido rosa mono (L = R) a -18 dBFS
-  37-40 s      ruido rosa solo lateral (L = -R) a -24 dBFS
-  41-44 s      ruido rosa estéreo decorrelado a -18 dBFS
-  45-49 s      dos tonos 60 Hz + 7 kHz (intermodulación) a -12 dBFS
+Señal de medición para comparar AIE Exciter / AIE Imager con Ozone. Pensada para versiones de demostración
+que meten silencios: cada medida aparece TRES veces en momentos distintos y el analizador usa las copias que
+no caen en un silencio. Estéreo, 44,1 kHz, 32 bits coma flotante, ~70 s.
+
+Medidas: impulsos (latencia), senos de 100 Hz / 1 kHz / 5 kHz a -24, -12, -6 y -0,1 dBFS (0,6 s), barridos
+20 Hz - 20 kHz a -12 dBFS (4 s), golpes de batería (2 s), ruido rosa mono / lateral / estéreo (1,5 s) y dos
+tonos 60 Hz + 7 kHz (1 s).
 """
+import json
 import os
-import wave
 import numpy as np
 
 FS = 44100
-DUR = 50.0
 rng = np.random.default_rng(1234)
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def db(x):
@@ -26,17 +22,16 @@ def db(x):
 
 
 def pink(n):
-    # ruido rosa por filtrado del espectro
     w = rng.standard_normal(n)
     f = np.fft.rfft(w)
-    k = np.arange(len(f))
+    k = np.arange(len(f)).astype(float)
     k[0] = 1
     f /= np.sqrt(k)
     p = np.fft.irfft(f, n)
     return p / np.sqrt(np.mean(p ** 2))
 
 
-def fade(x, ms=10):
+def fade(x, ms=8):
     n = int(FS * ms / 1000)
     w = np.ones(len(x))
     w[:n] = np.linspace(0, 1, n)
@@ -44,72 +39,80 @@ def fade(x, ms=10):
     return x * w
 
 
-def main():
-    n = int(FS * DUR)
-    L = np.zeros(n)
-    R = np.zeros(n)
-    t = np.arange(n) / FS
-
-    def put(start, sig_l, sig_r=None):
-        i = int(start * FS)
-        L[i:i + len(sig_l)] += sig_l
-        R[i:i + len(sig_l)] += sig_l if sig_r is None else sig_r
-
-    imp = np.zeros(8)
-    imp[0] = db(-6)
-    put(1.0, imp)
-    for start, f in ((2, 100), (7, 1000), (12, 5000)):
-        for j, lv in enumerate((-24, -12, -6, 0)):
-            m = int(FS * 0.95)
-            s = db(min(lv, -0.1)) * np.sin(2 * np.pi * f * np.arange(m) / FS)  # 0 dBFS -> -0,1 para no recortar
-            put(start + j, fade(s))
-    m = int(FS * 10)
-    tt = np.arange(m) / FS
-    f0, f1 = 20.0, 20000.0
-    k = np.log(f1 / f0)
-    sweep = db(-12) * np.sin(2 * np.pi * f0 * 10 / k * (np.exp(tt / 10 * k) - 1))
-    put(17, fade(sweep, 50))
-    # batería: bombo + caja + charles cada 0,25 s
+def items():
+    """Lista de (tipo, parámetros, L, R)."""
+    out = []
+    for f in (100, 1000, 5000):
+        for lv in (-24, -12, -6, -0.1):
+            m = int(FS * 0.6)
+            s = fade(db(lv) * np.sin(2 * np.pi * f * np.arange(m) / FS))
+            out.append(("seno", {"f": f, "nivel": lv}, s, s))
     m = int(FS * 4)
+    tt = np.arange(m) / FS
+    k = np.log(20000 / 20)
+    sw = fade(db(-12) * np.sin(2 * np.pi * 20 * 4 / k * (np.exp(tt / 4 * k) - 1)), 30)
+    out.append(("barrido", {"f0": 20, "f1": 20000, "dur": 4, "nivel": -12}, sw, sw))
+    m = int(FS * 2)
     tt = np.arange(m) / FS
     tb = np.mod(tt, 0.5)
     kick = 0.8 * np.exp(-tb * 18) * np.sin(2 * np.pi * (50 + 120 * np.exp(-tb * 40)) * tb)
     nz = rng.standard_normal(m)
-    ts = np.mod(tt + 0.25, 0.5)
-    snare = 0.35 * np.exp(-ts * 30) * nz
-    th = np.mod(tt, 0.125)
-    hat = 0.12 * np.exp(-th * 90) * np.diff(np.concatenate([[0], nz]))
-    drums = kick + snare + hat
-    drums *= db(-3) / np.abs(drums).max()  # pico de los golpes a -3 dBFS
-    put(28, fade(drums))
-    m = int(FS * 3)
-    put(33, fade(db(-18) * pink(m)))
+    snare = 0.35 * np.exp(-np.mod(tt + 0.25, 0.5) * 30) * nz
+    hat = 0.12 * np.exp(-np.mod(tt, 0.125) * 90) * np.diff(np.concatenate([[0], nz]))
+    dr = kick + snare + hat
+    dr = fade(dr * db(-3) / np.abs(dr).max())
+    out.append(("bateria", {}, dr, dr))
+    m = int(FS * 1.5)
+    s = fade(db(-18) * pink(m))
+    out.append(("ruido_mono", {"nivel": -18}, s, s))
     s = fade(db(-24) * pink(m))
-    put(37, s, -s)
-    put(41, fade(db(-18) * pink(m)), fade(db(-18) * pink(m)))
-    m = int(FS * 4)
+    out.append(("ruido_lateral", {"nivel": -24}, s, -s))
+    out.append(("ruido_estereo", {"nivel": -18}, fade(db(-18) * pink(m)), fade(db(-18) * pink(m))))
+    m = int(FS * 1.0)
     tt = np.arange(m) / FS
-    two = db(-12) * (0.8 * np.sin(2 * np.pi * 60 * tt) + 0.2 * np.sin(2 * np.pi * 7000 * tt))
-    put(45, fade(two))
+    s = fade(db(-12) * (0.8 * np.sin(2 * np.pi * 60 * tt) + 0.2 * np.sin(2 * np.pi * 7000 * tt)))
+    out.append(("dos_tonos", {"f1": 60, "f2": 7000, "nivel": -12}, s, s))
+    return out
+
+
+def main():
+    base = items()
+    gap = int(FS * 0.15)
+    segs, chunks = [], []
+    pos = 0
+
+    def add(kind, prm, l, r, copy):
+        nonlocal pos
+        segs.append({"tipo": kind, **prm, "copia": copy, "inicio": pos, "fin": pos + len(l)})
+        chunks.append((pos, l, r))
+        pos += len(l) + gap
+
+    for copy in range(3):
+        imp = np.zeros(int(FS * 0.2))
+        imp[0] = db(-6)
+        add("impulso", {}, imp, imp, copy)
+        order = list(range(len(base)))
+        rng.shuffle(order)  # cada copia en otro orden: un silencio no borra lo mismo dos veces
+        for i in order:
+            kind, prm, l, r = base[i]
+            add(kind, prm, l, r, copy)
+    n = pos + FS
+    L = np.zeros(n)
+    R = np.zeros(n)
+    for p, l, r in chunks:
+        L[p:p + len(l)] += l
+        R[p:p + len(r)] += r
     data = np.stack([L, R], 1).astype(np.float32)
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "senal_prueba_ozone.wav")
-    # WAV de 32 bits en coma flotante (formato 3)
-    with open(out, "wb") as f:
-        raw = data.tobytes()
-        f.write(b"RIFF")
-        f.write((36 + len(raw)).to_bytes(4, "little"))
-        f.write(b"WAVEfmt ")
-        f.write((16).to_bytes(4, "little"))
-        f.write((3).to_bytes(2, "little"))
-        f.write((2).to_bytes(2, "little"))
-        f.write(FS.to_bytes(4, "little"))
-        f.write((FS * 8).to_bytes(4, "little"))
-        f.write((8).to_bytes(2, "little"))
-        f.write((32).to_bytes(2, "little"))
-        f.write(b"data")
-        f.write(len(raw).to_bytes(4, "little"))
-        f.write(raw)
-    print("escrito", out, f"{os.path.getsize(out) / 1e6:.1f} MB, pico {np.abs(data).max():.3f}")
+    wav = os.path.join(HERE, "senal_prueba_ozone.wav")
+    raw = data.tobytes()
+    with open(wav, "wb") as f:
+        f.write(b"RIFF" + (36 + len(raw)).to_bytes(4, "little") + b"WAVEfmt " + (16).to_bytes(4, "little"))
+        f.write((3).to_bytes(2, "little") + (2).to_bytes(2, "little") + FS.to_bytes(4, "little"))
+        f.write((FS * 8).to_bytes(4, "little") + (8).to_bytes(2, "little") + (32).to_bytes(2, "little"))
+        f.write(b"data" + len(raw).to_bytes(4, "little") + raw)
+    with open(os.path.join(HERE, "senal_prueba_ozone.json"), "w", encoding="utf-8") as f:
+        json.dump({"fs": FS, "segmentos": segs}, f, indent=1, ensure_ascii=False)
+    print(f"escrito {wav}: {n / FS:.1f} s, pico {np.abs(data).max():.3f}, {len(segs)} segmentos")
 
 
 if __name__ == "__main__":

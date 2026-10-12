@@ -1,0 +1,449 @@
+{
+ "fs": 44100,
+ "segmentos": [
+  {
+   "tipo": "impulso",
+   "copia": 0,
+   "inicio": 0,
+   "fin": 8820
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -6,
+   "copia": 0,
+   "inicio": 15435,
+   "fin": 41895
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -24,
+   "copia": 0,
+   "inicio": 48510,
+   "fin": 74970
+  },
+  {
+   "tipo": "ruido_estereo",
+   "nivel": -18,
+   "copia": 0,
+   "inicio": 81585,
+   "fin": 147735
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -24,
+   "copia": 0,
+   "inicio": 154350,
+   "fin": 180810
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -0.1,
+   "copia": 0,
+   "inicio": 187425,
+   "fin": 213885
+  },
+  {
+   "tipo": "barrido",
+   "f0": 20,
+   "f1": 20000,
+   "dur": 4,
+   "nivel": -12,
+   "copia": 0,
+   "inicio": 220500,
+   "fin": 396900
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -24,
+   "copia": 0,
+   "inicio": 403515,
+   "fin": 429975
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -6,
+   "copia": 0,
+   "inicio": 436590,
+   "fin": 463050
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -12,
+   "copia": 0,
+   "inicio": 469665,
+   "fin": 496125
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -0.1,
+   "copia": 0,
+   "inicio": 502740,
+   "fin": 529200
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -0.1,
+   "copia": 0,
+   "inicio": 535815,
+   "fin": 562275
+  },
+  {
+   "tipo": "ruido_mono",
+   "nivel": -18,
+   "copia": 0,
+   "inicio": 568890,
+   "fin": 635040
+  },
+  {
+   "tipo": "dos_tonos",
+   "f1": 60,
+   "f2": 7000,
+   "nivel": -12,
+   "copia": 0,
+   "inicio": 641655,
+   "fin": 685755
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -12,
+   "copia": 0,
+   "inicio": 692370,
+   "fin": 718830
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -6,
+   "copia": 0,
+   "inicio": 725445,
+   "fin": 751905
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -12,
+   "copia": 0,
+   "inicio": 758520,
+   "fin": 784980
+  },
+  {
+   "tipo": "bateria",
+   "copia": 0,
+   "inicio": 791595,
+   "fin": 879795
+  },
+  {
+   "tipo": "ruido_lateral",
+   "nivel": -24,
+   "copia": 0,
+   "inicio": 886410,
+   "fin": 952560
+  },
+  {
+   "tipo": "impulso",
+   "copia": 1,
+   "inicio": 959175,
+   "fin": 967995
+  },
+  {
+   "tipo": "barrido",
+   "f0": 20,
+   "f1": 20000,
+   "dur": 4,
+   "nivel": -12,
+   "copia": 1,
+   "inicio": 974610,
+   "fin": 1151010
+  },
+  {
+   "tipo": "dos_tonos",
+   "f1": 60,
+   "f2": 7000,
+   "nivel": -12,
+   "copia": 1,
+   "inicio": 1157625,
+   "fin": 1201725
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -6,
+   "copia": 1,
+   "inicio": 1208340,
+   "fin": 1234800
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -24,
+   "copia": 1,
+   "inicio": 1241415,
+   "fin": 1267875
+  },
+  {
+   "tipo": "ruido_estereo",
+   "nivel": -18,
+   "copia": 1,
+   "inicio": 1274490,
+   "fin": 1340640
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -24,
+   "copia": 1,
+   "inicio": 1347255,
+   "fin": 1373715
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -6,
+   "copia": 1,
+   "inicio": 1380330,
+   "fin": 1406790
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -0.1,
+   "copia": 1,
+   "inicio": 1413405,
+   "fin": 1439865
+  },
+  {
+   "tipo": "ruido_lateral",
+   "nivel": -24,
+   "copia": 1,
+   "inicio": 1446480,
+   "fin": 1512630
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -0.1,
+   "copia": 1,
+   "inicio": 1519245,
+   "fin": 1545705
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -12,
+   "copia": 1,
+   "inicio": 1552320,
+   "fin": 1578780
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -6,
+   "copia": 1,
+   "inicio": 1585395,
+   "fin": 1611855
+  },
+  {
+   "tipo": "bateria",
+   "copia": 1,
+   "inicio": 1618470,
+   "fin": 1706670
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -12,
+   "copia": 1,
+   "inicio": 1713285,
+   "fin": 1739745
+  },
+  {
+   "tipo": "ruido_mono",
+   "nivel": -18,
+   "copia": 1,
+   "inicio": 1746360,
+   "fin": 1812510
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -12,
+   "copia": 1,
+   "inicio": 1819125,
+   "fin": 1845585
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -24,
+   "copia": 1,
+   "inicio": 1852200,
+   "fin": 1878660
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -0.1,
+   "copia": 1,
+   "inicio": 1885275,
+   "fin": 1911735
+  },
+  {
+   "tipo": "impulso",
+   "copia": 2,
+   "inicio": 1918350,
+   "fin": 1927170
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -0.1,
+   "copia": 2,
+   "inicio": 1933785,
+   "fin": 1960245
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -6,
+   "copia": 2,
+   "inicio": 1966860,
+   "fin": 1993320
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -6,
+   "copia": 2,
+   "inicio": 1999935,
+   "fin": 2026395
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -24,
+   "copia": 2,
+   "inicio": 2033010,
+   "fin": 2059470
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -24,
+   "copia": 2,
+   "inicio": 2066085,
+   "fin": 2092545
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -12,
+   "copia": 2,
+   "inicio": 2099160,
+   "fin": 2125620
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -12,
+   "copia": 2,
+   "inicio": 2132235,
+   "fin": 2158695
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -24,
+   "copia": 2,
+   "inicio": 2165310,
+   "fin": 2191770
+  },
+  {
+   "tipo": "ruido_mono",
+   "nivel": -18,
+   "copia": 2,
+   "inicio": 2198385,
+   "fin": 2264535
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -0.1,
+   "copia": 2,
+   "inicio": 2271150,
+   "fin": 2297610
+  },
+  {
+   "tipo": "ruido_lateral",
+   "nivel": -24,
+   "copia": 2,
+   "inicio": 2304225,
+   "fin": 2370375
+  },
+  {
+   "tipo": "seno",
+   "f": 1000,
+   "nivel": -0.1,
+   "copia": 2,
+   "inicio": 2376990,
+   "fin": 2403450
+  },
+  {
+   "tipo": "barrido",
+   "f0": 20,
+   "f1": 20000,
+   "dur": 4,
+   "nivel": -12,
+   "copia": 2,
+   "inicio": 2410065,
+   "fin": 2586465
+  },
+  {
+   "tipo": "seno",
+   "f": 5000,
+   "nivel": -6,
+   "copia": 2,
+   "inicio": 2593080,
+   "fin": 2619540
+  },
+  {
+   "tipo": "bateria",
+   "copia": 2,
+   "inicio": 2626155,
+   "fin": 2714355
+  },
+  {
+   "tipo": "seno",
+   "f": 100,
+   "nivel": -12,
+   "copia": 2,
+   "inicio": 2720970,
+   "fin": 2747430
+  },
+  {
+   "tipo": "dos_tonos",
+   "f1": 60,
+   "f2": 7000,
+   "nivel": -12,
+   "copia": 2,
+   "inicio": 2754045,
+   "fin": 2798145
+  },
+  {
+   "tipo": "ruido_estereo",
+   "nivel": -18,
+   "copia": 2,
+   "inicio": 2804760,
+   "fin": 2870910
+  }
+ ]
+}

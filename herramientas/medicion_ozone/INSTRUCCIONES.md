@@ -1,16 +1,20 @@
-# Medir Ozone 11 para igualar AIE Exciter y AIE Imager
+# Medir Ozone para igualar AIE Exciter y AIE Imager
+
+La señal (`senal_prueba_ozone.wav`, ~66 s) repite cada medida tres veces en momentos distintos: **sirven las
+versiones de demostración que meten silencios**; `analizar.py` detecta los silencios y usa las copias enteras.
 
 ## Qué hacer
-1. Abre `senal_prueba_ozone.wav` (50 s) en **Ozone 11**. Sirve la aplicación independiente de Ozone (no hace
-   falta un DAW) o cualquier DAW de 64 bits. Cubase 5 de 32 bits no puede cargar Ozone 11.
+1. Abre `senal_prueba_ozone.wav` en **Ozone** (7 u 11): como plugin en una pista de Cubase (Ozone 7 tiene
+   versión de 32 bits) o en la aplicación independiente de Ozone. Cubase 5 de 32 bits no carga Ozone 11.
 2. Desactiva **todos** los módulos menos el que se mide. Ganancia de entrada y salida a 0 dB. Sin dither.
 3. Exporta cada ajuste de la lista como **WAV 44,1 kHz, 32 bits coma flotante** (o 24 bits), estéreo,
-   el archivo entero (los 50 s, sin recortar el principio).
+   el archivo entero (desde 0 s hasta el final, sin recortar el principio).
 4. Pon a cada archivo el nombre exacto de la lista.
 
 ## Exciter (módulo Exciter solo)
-Ajusta las cuatro bandas igual (o una sola banda si Ozone lo permite), **Mix 100 %**, **Oversampling activado**,
-modo normal (ni Mid/Side ni Transient).
+Interruptor **Multiband apagado** (una sola banda) o las cuatro bandas iguales, **Mix 100 %**, **Oversampling
+activado** si existe, modo normal (ni Mid/Side ni Transient). Si tu versión no tiene algún perfil (Ozone 7 puede
+no tener Dual Triode o Warm Tape), sáltalo.
 
 | Archivo | Perfil | Amount |
 |---|---|---|
@@ -33,6 +37,10 @@ Las cuatro bandas con el mismo valor.
 | `imager_width_mas50.wav` | Width +50 en todas las bandas |
 | `imager_stereoize1_50.wav` | Width 0, Stereoize I (modo I) a 50 en todas las bandas |
 | `imager_stereoize2_50.wav` | Width 0, Stereoize II a 50 en todas las bandas |
+
+## Cómo se analiza
+`python analizar.py exciter_tube_50.wav ...` imprime latencia, ganancia y armónicos H2-H7 de cada seno, respuesta
+en frecuencia, cambio de Mid/Side en los ruidos e intermodulación, y guarda `*_medidas.json`.
 
 ## Qué mido con cada archivo
 - Armónicos (H2...H7) de 100 Hz, 1 kHz y 5 kHz a -24, -12, -6 y 0 dBFS: carácter de cada perfil y cómo cambia
