@@ -193,3 +193,10 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
   flojos hasta +18 dB o bajaba los fuertes). Solución: normalizar por la envolvente antes de saturar; ahora el
   volumen queda a ±0,2 dB en cualquier nivel y los armónicos son proporcionales solo al Amount.
 - Pendiente: probarlo en Cubase 5 real.
+- Primera compilación en Windows: todas las pruebas de sonido pasaron, pero dibujar tardaba 41 ms y el audio
+  ~3x más que en Linux (32 bits con MSVC: hypot/tanh/exp lentos). Arreglos: hypot -> sqrt en el lienzo común
+  (imagen idéntica), curvas de saturación en tabla de 4096 puntos con interpolación (error < -90 dB) y curva de
+  la gráfica en caché. Linux: dibujo 4,1 -> 2,4 ms; audio x2 3,6 -> 3,0 %, x8 9,2 -> 7,3 %.
+- Señal de medición para Ozone con cada medida triplicada (la demo de Ozone 7 del usuario mete silencios) y
+  analizador `herramientas/medicion_ozone/analizar.py`, verificado con una simulación (latencia, silencios y
+  armónicos teóricos correctos).

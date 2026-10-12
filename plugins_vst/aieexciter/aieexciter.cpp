@@ -121,25 +121,41 @@ struct Splitter {
 };
 
 // Saturación de una componente normalizada (entre -1 y 1): f(g·u) escalada para que un seno de amplitud 1
-// conserve su energía (RMS) aunque la saturación lo acerque a una onda cuadrada.
+// conserve su energía (RMS) aunque la saturación lo acerque a una onda cuadrada. La curva se guarda en una
+// tabla de 4096 puntos con interpolación lineal (error < -90 dB) para no calcular tanh/exp en cada muestra.
+inline double saturatorGain(int prof, double g) {
+    const double pi = 3.14159265358979323846;
+    double mean = 0, sq = 0, v[64];
+    for (int i = 0; i < 64; ++i) { v[i] = shape(prof, g * std::sin(2 * pi * (i + 0.5) / 64)); mean += v[i]; }
+    mean /= 64;
+    for (int i = 0; i < 64; ++i) sq += (v[i] - mean) * (v[i] - mean);
+    double r = std::sqrt(sq / 64);
+    return r > 1e-12 ? (1.0 / std::sqrt(2.0)) / r : 1.0;
+}
 struct Saturator {
-    int prof = kWarm;
+    static const int kTable = 4096;
+    static constexpr double kRange = 1.5;  // la entrada normalizada puede pasar un poco de 1 al sobremuestrear
+    int prof = -1;
     double g = -1, k = 1;
+    float table[kTable + 2];
     void set(int profile, double drive) {
         if (profile == prof && drive == g) return;
         prof = profile;
         g = drive;
-        const double xr = 1.0, pi = 3.14159265358979323846;
-        double mean = 0, sq = 0;
-        const int N = 64;
-        double v[N];
-        for (int i = 0; i < N; ++i) { v[i] = shape(prof, g * xr * std::sin(2 * pi * (i + 0.5) / N)); mean += v[i]; }
-        mean /= N;
-        for (int i = 0; i < N; ++i) sq += (v[i] - mean) * (v[i] - mean);
-        double r = std::sqrt(sq / N);
-        k = r > 1e-12 ? (xr / std::sqrt(2.0)) / r : 1.0;
+        k = saturatorGain(prof, g);
+        for (int i = 0; i <= kTable + 1; ++i) {
+            double u = -kRange + 2 * kRange * i / kTable;
+            table[i] = float(k * shape(prof, g * u));
+        }
     }
-    inline double operator()(double x) const { return k * shape(prof, g * x); }
+    inline double operator()(double x) const {
+        double pos = (x + kRange) * (kTable / (2 * kRange));
+        if (pos <= 0) return table[0];
+        if (pos >= kTable) return table[kTable];
+        int i = int(pos);
+        double fr = pos - i;
+        return table[i] + (table[i + 1] - table[i]) * fr;
+    }
 };
 
 struct DcBlock {  // paso alto de 1 polo a ~10 Hz (las curvas asimétricas generan continua)
@@ -247,7 +263,10 @@ public:
     int osIdx() const { int v = int(params[kOversampling] * (kNumOs - 1) + 0.5f); return std::min(kNumOs - 1, std::max(0, v)); }
     double driveOf(int b) const { return std::pow(10.0, params[kAmt1 + b] * kMaxDriveDb / 20.0); }
     double outputDb() const { return -12.0 + 24.0 * params[kOutput]; }
-    double curve(int b, double x) const { Saturator s; s.set(profileOf(b), driveOf(b)); return s(x); }
+    double curve(int b, double x) const {  // curva exacta (para la gráfica)
+        double g = driveOf(b);
+        return saturatorGain(profileOf(b), g) * shape(profileOf(b), g * x);
+    }
 
     template <typename T>
     void run(T** in, T** out, int32_t n) {
@@ -429,6 +448,9 @@ public:
     Rect tglDelta = {680, 372, 128, 30};
     Rect outTrack = {680, 440, 200, 22};
     int selected = 1;  // banda que se ve en la gráfica de la curva
+    int curveKey[2] = {-1, -1};
+    double curveAmt = -1;
+    std::vector<double> curveXs, curveYs;
 
     float bandLvl[kBands] = {0, 0, 0, 0}, addLvl[kBands] = {0, 0, 0, 0};
     uint32_t lastSeq = 0;
@@ -647,15 +669,19 @@ public:
             cv.fill({g.x + 8, int(Y(v)), g.w - 16, 1}, rgb(34, 32, 42));
         }
         cv.line(X(-1), Y(-1), X(1), Y(1), 1.0, rgb(70, 66, 82));
-        std::vector<double> xs, ys;
+        // la curva solo se recalcula si cambia la banda, el perfil o el Amount
         double amt = p->params[kAmt1 + selected];
-        for (int i = 0; i <= 160; ++i) {
-            double x = -1 + 2.0 * i / 160;
-            double y = x + (p->curve(selected, x) - x) * amt;
-            xs.push_back(X(x));
-            ys.push_back(Y(std::max(-1.2, std::min(1.2, y))));
+        if (curveKey[0] != selected || curveKey[1] != p->profileOf(selected) || curveAmt != amt) {
+            curveKey[0] = selected; curveKey[1] = p->profileOf(selected); curveAmt = amt;
+            curveXs.clear(); curveYs.clear();
+            for (int i = 0; i <= 160; ++i) {
+                double x = -1 + 2.0 * i / 160;
+                double y = x + (p->curve(selected, x) - x) * amt;
+                curveXs.push_back(X(x));
+                curveYs.push_back(Y(std::max(-1.2, std::min(1.2, y))));
+            }
         }
-        cv.polyline(xs, ys, 2.2, kBandColors[selected]);
+        cv.polyline(curveXs, curveYs, 2.2, kBandColors[selected]);
         char t[64];
         std::snprintf(t, sizeof t, "Banda %d: %s", selected + 1, p->paramText(kProf1 + selected).c_str());
         cv.text(kFontSmall, g.x + 10, g.y + 8, t, kDim);

@@ -73,7 +73,7 @@ public:
             for (int x = r.x; x < r.r(); ++x) {
                 double cx = std::min(std::max(x + 0.5, r.x + rad), r.r() - rad);
                 double cy = std::min(std::max(y + 0.5, r.y + rad), r.b() - rad);
-                double d = std::hypot(x + 0.5 - cx, y + 0.5 - cy);
+                double d = std::sqrt((x + 0.5 - cx) * (x + 0.5 - cx) + (y + 0.5 - cy) * (y + 0.5 - cy));
                 double cover = std::min(1.0, std::max(0.0, rad - d + 0.5));
                 if (rad <= 0) cover = 1;
                 blend(x, y, c, cover);
@@ -84,7 +84,7 @@ public:
         if (r.w <= 0 || r.h <= 0) return 0;
         double cx = std::min(std::max(x + 0.5, r.x + rad), r.r() - rad);
         double cy = std::min(std::max(y + 0.5, r.y + rad), r.b() - rad);
-        double d = std::hypot(x + 0.5 - cx, y + 0.5 - cy);
+        double d = std::sqrt((x + 0.5 - cx) * (x + 0.5 - cx) + (y + 0.5 - cy) * (y + 0.5 - cy));
         bool inside = x >= r.x && y >= r.y && x < r.r() && y < r.b();
         if (!inside) return 0;
         return rad <= 0 ? 1.0 : std::min(1.0, std::max(0.0, rad - d + 0.5));
@@ -121,7 +121,8 @@ public:
                     double px_ = x + 0.5, py = y + 0.5;
                     double t = len2 > 0 ? ((px_ - ax) * dx + (py - ay) * dy) / len2 : 0;
                     t = std::min(1.0, std::max(0.0, t));
-                    double d = std::hypot(px_ - (ax + t * dx), py - (ay + t * dy));
+                    double ex = px_ - (ax + t * dx), ey = py - (ay + t * dy);
+                    double d = std::sqrt(ex * ex + ey * ey);
                     float cover = float(std::min(1.0, std::max(0.0, hw - d + 0.5)));
                     float& m = mask[size_t(y - y0) * mw + (x - x0)];
                     if (cover > m) m = cover;
@@ -140,7 +141,7 @@ public:
     void circle(double cx, double cy, double rad, Color c) {
         for (int y = int(cy - rad - 1); y <= int(cy + rad + 1); ++y)
             for (int x = int(cx - rad - 1); x <= int(cx + rad + 1); ++x) {
-                double d = std::hypot(x + 0.5 - cx, y + 0.5 - cy);
+                double d = std::sqrt((x + 0.5 - cx) * (x + 0.5 - cx) + (y + 0.5 - cy) * (y + 0.5 - cy));
                 blend(x, y, c, std::min(1.0, std::max(0.0, rad - d + 0.5)));
             }
     }
