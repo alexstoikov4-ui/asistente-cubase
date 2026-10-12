@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
     CHECK(fx && fx->magic == 0x56737450, "AEffect válido");
     char name[64] = {0};
     fx->dispatcher(fx, 45, 0, 0, name, 0);
-    CHECK(strcmp(name, "AIE Imager") == 0 && fx->numParams == 16 && fx->initialDelay == 0, "AIE Imager: 16 parámetros, sin latencia");
+    CHECK(strcmp(name, "AIE Imager") == 0 && fx->numParams == 23 && fx->initialDelay == 0, "AIE Imager: 23 parámetros, sin latencia");
     CHECK(fx->dispatcher(fx, 35, 0, 0, NULL, 0) == 1, "categoría de efecto");
     fx->dispatcher(fx, 0, 0, 0, NULL, 0);
     fx->dispatcher(fx, 10, 0, 0, NULL, 48000.0f);
@@ -84,8 +84,8 @@ int main(int argc, char** argv) {
         typedef struct { short top, left, bottom, right; } ERect;
         ERect* r = NULL;
         VstIntPtr ok = fx->dispatcher(fx, 13, 0, 0, &r, 0);
-        CHECK((fx->flags & 1) && ok && r && r->right == 900 && r->bottom == 440, "editor propio de 900x440");
-        HWND parent = CreateWindowExA(0, "STATIC", "anfitrion", WS_OVERLAPPEDWINDOW, 0, 0, 1000, 560, NULL, NULL,
+        CHECK((fx->flags & 1) && ok && r && r->right == 960 && r->bottom == 570, "editor propio de 960x570");
+        HWND parent = CreateWindowExA(0, "STATIC", "anfitrion", WS_OVERLAPPEDWINDOW, 0, 0, 1060, 680, NULL, NULL,
                                       GetModuleHandleA(NULL), NULL);
         for (int rep = 0; rep < 2; rep++) {
             VstIntPtr o = fx->dispatcher(fx, 14, 0, 0, parent, 0);
@@ -98,18 +98,18 @@ int main(int argc, char** argv) {
                 while (PeekMessageA(&m, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m); DispatchMessageA(&m); }
                 Sleep(10);
             }
-            SendMessageA(child, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(664, 345)); /* botón Mono */
-            SendMessageA(child, WM_LBUTTONUP, 0, MAKELPARAM(664, 345));
+            SendMessageA(child, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(700, 387)); /* botón Mono */
+            SendMessageA(child, WM_LBUTTONUP, 0, MAKELPARAM(700, 387));
             CHECK(fx->getParameter(fx, 15) > 0.5f, "clic en el botón Mono");
             fx->setParameter(fx, 15, 0.0f);
             HDC sdc = GetDC(NULL), mdc = CreateCompatibleDC(sdc);
-            HBITMAP bmp = CreateCompatibleBitmap(sdc, 900, 440);
+            HBITMAP bmp = CreateCompatibleBitmap(sdc, 960, 570);
             HGDIOBJ old = SelectObject(mdc, bmp);
             SendMessageA(child, WM_PRINTCLIENT, (WPARAM)mdc, PRF_CLIENT);
             int distinct = 0;
             COLORREF seen[512];
-            for (int y = 5; y < 440 && distinct < 512; y += 7)
-                for (int x = 5; x < 900 && distinct < 512; x += 7) {
+            for (int y = 5; y < 570 && distinct < 512; y += 7)
+                for (int x = 5; x < 960 && distinct < 512; x += 7) {
                     COLORREF c = GetPixel(mdc, x, y);
                     int found = 0;
                     for (int q = 0; q < distinct; q++) if (seen[q] == c) { found = 1; break; }

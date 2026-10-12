@@ -180,3 +180,7 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
 - Primer intento con bandas por resta: separación pobre (Width 200 % daba x1,41); se cambió a árbol LR4 con
   compensación de fase (x1,94, Width 0 % deja la banda en mono con lateral residual -38 dB).
 - Pendiente: probarlo en Cubase 5 real.
+- 1.1 (el usuario midió con exportaciones: criterio "que no se pongan ni rojo ni naranja"): espectro Mid/Side en
+  tiempo real, límites de correlación por frecuencia, escala de Width como Ozone (-100..+100), Stereoize I/II
+  (II decorrelado), Bypass por banda, Link, vectorscopio Polar Sample / Polar Level / Lissajous, controles en
+  columnas fijas. Mono intacto probado con los dos modos de Stereoize. 23 parámetros (los 16 de la 1.0 igual).

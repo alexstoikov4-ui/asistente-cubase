@@ -78,13 +78,19 @@ int main(int argc, char** argv) {
         std::vector<float> rL, rR;
         process(ref, L, R, rL, rR);
         float ws[4] = {0.0f, 1.0f, 0.2f, 0.85f}, sts[4] = {1.0f, 0.4f, 0.0f, 0.7f};
-        for (int b = 0; b < kBands; ++b) { p.params[kW1 + b] = ws[b]; p.params[kS1 + b] = sts[b]; }
-        process(p, L, R, oL, oR);
-        double err = 0;
-        for (int i = 0; i < n; ++i) err = std::max(err, std::fabs(double(oL[i] + oR[i]) - double(rL[i] + rR[i])));
-        char m[96];
-        std::snprintf(m, sizeof m, "suma mono intacta con anchuras y stereoize extremos (error %.1e)", err);
-        CHECK(err < 1e-5, m);
+        for (int mode = 0; mode < 2; ++mode) {
+            AIEImager q(hostCb);
+            q.setSampleRate(fs);
+            q.params[kStereoMode] = float(mode);
+            for (int b = 0; b < kBands; ++b) { q.params[kW1 + b] = ws[b]; q.params[kS1 + b] = sts[b]; }
+            q.params[kByp1 + 2] = 1.0f;
+            process(q, L, R, oL, oR);
+            double err = 0;
+            for (int i = 0; i < n; ++i) err = std::max(err, std::fabs(double(oL[i] + oR[i]) - double(rL[i] + rR[i])));
+            char m[128];
+            std::snprintf(m, sizeof m, "suma mono intacta con ajustes extremos, Stereoize %s y un Bypass (error %.1e)", mode ? "II" : "I", err);
+            CHECK(err < 1e-5, m);
+        }
     }
     {   // 3) Width 0 % en la banda de agudos: el tono de 9 kHz queda centrado (L = R)
         AIEImager p(hostCb);
@@ -164,7 +170,44 @@ int main(int argc, char** argv) {
         p.crossovers(f);
         CHECK(f[0] < f[1] && f[1] < f[2], "cortes cruzados se ordenan solos");
     }
-    // 9) interfaz: medidores, ratón y velocidad
+    {   // 9) Bypass de una banda: esa banda vuelve a su anchura original aunque su Width esté a -100
+        AIEImager ref(hostCb), p2(hostCb);
+        ref.setSampleRate(fs);
+        p2.setSampleRate(fs);
+        p2.params[kW1 + 1] = 0.0f;
+        p2.params[kByp1 + 1] = 1.0f;
+        std::vector<float> rL, rR;
+        process(ref, L, R, rL, rR);
+        process(p2, L, R, oL, oR);
+        double err = 0;
+        for (int i = 0; i < n; ++i) err = std::max(err, double(std::fabs(oL[i] - rL[i])) + std::fabs(oR[i] - rR[i]));
+        char m[96];
+        std::snprintf(m, sizeof m, "Bypass anula el Width de su banda (diferencia %.1e)", err);
+        CHECK(err < 1e-6, m);
+    }
+    {   // 10) los dos modos de Stereoize abren una banda mono
+        for (int mode = 0; mode < 2; ++mode) {
+            AIEImager q(hostCb);
+            q.setSampleRate(fs);
+            q.params[kStereoMode] = float(mode);
+            q.params[kS1 + 2] = 1.0f;
+            std::vector<float> mL(n), mR(n);
+            for (int i = 0; i < n; ++i) mL[i] = mR[i] = 0.3f * float(std::sin(2 * PI * 2500 * i / fs) + 0.5 * std::sin(2 * PI * 3700 * i / fs));
+            process(q, mL, mR, oL, oR);
+            double se = 0, me = 0;
+            for (int i = 4000; i < n; ++i) { double s = 0.5 * (oL[i] - oR[i]), mm = 0.5 * (oL[i] + oR[i]); se += s * s; me += mm * mm; }
+            char m[96];
+            std::snprintf(m, sizeof m, "Stereoize %s abre una banda mono (lateral/central %.2f)", mode ? "II" : "I", std::sqrt(se / me));
+            CHECK(std::sqrt(se / me) > 0.4, m);
+        }
+    }
+    {   // 11) límites de correlación según la frecuencia: graves estrictos, agudos permisivos
+        double lo = safeCorrelation(60), mid = safeCorrelation(1000), hi = safeCorrelation(10000);
+        char m[128];
+        std::snprintf(m, sizeof m, "límite verde: 60 Hz %.2f, 1 kHz %.2f, 10 kHz %.2f", lo, mid, hi);
+        CHECK(lo >= 0.85 && hi <= 0.15 && lo > mid && mid > hi, m);
+    }
+    // 12) interfaz: medidores, ratón y velocidad
     AIEImager p(hostCb);
     p.setSampleRate(fs);
     gui::ImagerEditor ed(&p);
@@ -201,13 +244,46 @@ int main(int argc, char** argv) {
     ed.mouseDown(ed.tglMono.x + 5, ed.tglMono.y + 5, false, false, 0, 0);
     CHECK(p.params[kMono] >= 0.5f, "botón Mono");
     p.params[kMono] = 0;
+    // Link: mover una anchura mueve todas lo mismo
+    ed.mouseDown(ed.tglLink.x + 5, ed.tglLink.y + 5, false, false, 0, 0);
+    for (int b = 0; b < kBands; ++b) p.params[kW1 + b] = 0.5f;
+    p.params[kW1 + 3] = 0.6f;
+    wf = ed.widthFader(1);
+    int ky = wf.b() - int(0.5f * wf.h);
+    ed.mouseDown(wf.x + 9, ky, false, false, 0, 0);
+    ed.mouseMove(wf.x + 9, ky - wf.h / 10, false);
+    ed.mouseUp();
+    // una décima del recorrido = +20 en la escala de Ozone (-100..+100)
+    std::snprintf(m, sizeof m, "Link: bandas 1/2/4 -> %.0f / %.0f / %.0f (todas suben 20)", p.ozoneWidth(0), p.ozoneWidth(1), p.ozoneWidth(3));
+    CHECK(std::fabs(p.ozoneWidth(0) - 20) < 1.5 && std::fabs(p.ozoneWidth(1) - 20) < 1.5 && std::fabs(p.ozoneWidth(3) - 40) < 1.5, m);
+    p.params[kLink] = 0;
+    gui::Rect bb = ed.bypBtn(2);
+    ed.mouseDown(bb.x + 5, bb.y + 5, false, false, 0, 0);
+    CHECK(p.bypassed(2), "botón Bypass de la banda 3");
+    ed.mouseDown(ed.btnModeI.x + 5, ed.btnModeI.y + 5, false, false, 0, 0);
+    CHECK(p.params[kStereoMode] < 0.5f, "botón Stereoize I");
+    for (int i = 0; i < 3; ++i) {
+        ed.mouseDown(ed.btnScope[i].x + 5, ed.btnScope[i].y + 5, false, false, 0, 0);
+        ed.draw();
+    }
+    CHECK(p.scopeMode() == 2, "botones del vectorscopio (Lissajous)");
+    // el espectro del lado muestra los agudos abiertos de la señal de prueba (9 kHz)
+    {
+        int k9 = int(9000.0 * gui::ImagerEditor::kFftN / fs), k60 = int(60.0 * gui::ImagerEditor::kFftN / fs);
+        float s9 = -200, s60 = -200;
+        for (int k = k9 - 2; k <= k9 + 2; ++k) s9 = std::max(s9, ed.specSide[k]);
+        for (int k = k60 - 2; k <= k60 + 2; ++k) s60 = std::max(s60, ed.specSide[k]);
+        std::snprintf(m, sizeof m, "espectro de lados: 9 kHz %.0f dB, 60 Hz (mono) %.0f dB", s9, s60);
+        CHECK(s9 > s60 + 30, m);
+    }
     auto t0 = std::chrono::steady_clock::now();
     for (int i = 0; i < 20; ++i) ed.draw();
     double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() / 20;
     std::snprintf(m, sizeof m, "dibujo de un fotograma: %.1f ms", ms);
     CHECK(ms < 25, m);
     if (argc > 1) {  // vista previa con ajustes de ejemplo
-        p.params[kW1] = 0.0f; p.params[kW1 + 2] = 0.7f; p.params[kW1 + 3] = 0.8f; p.params[kS1 + 1] = 0.35f;
+        p.params[kW1] = 0.0f; p.params[kW1 + 2] = 0.7f; p.params[kW1 + 3] = 0.6f; p.params[kS1 + 1] = 0.35f;
+        p.params[kByp1 + 2] = 0; p.params[kScopeMode] = 0; p.params[kStereoMode] = 1;
         for (size_t s = 0; s + 512 <= L.size(); s += 512) {
             float* in[2] = {L.data() + s, R.data() + s};
             float* out[2] = {oL.data() + s, oR.data() + s};

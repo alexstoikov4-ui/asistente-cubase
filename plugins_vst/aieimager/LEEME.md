@@ -10,21 +10,24 @@ Plugin VST 2.4 de 4 bandas para controlar la anchura estéreo por frecuencias, s
 - Bandas con un árbol de cruces Linkwitz-Riley de 4.º orden con compensación de fase: con todo al 100 % cada
   frecuencia sale al mismo nivel (desviación < 0,05 dB medida) y con la misma imagen estéreo.
 
-## Controles
+## Controles (versión 1.1, al estilo de Ozone 11)
 | Control | Qué hace |
 |---|---|
-| Cortes (asas de arriba) | frecuencias entre bandas (por defecto 120 Hz, 1 kHz, 6 kHz); se ordenan solos |
-| Width (vertical, por banda) | 0 % = banda en mono · 100 % = sin cambios · 200 % = doble de anchura |
-| Stereoize (horizontal) | abre en estéreo una banda mono añadiendo al lateral una copia retrasada de su centro (7–13 ms según la banda); no cambia la suma mono |
-| Solo | escuchar solo esa banda (se pueden combinar) |
+| Espectro estéreo | espectro en tiempo real del centro (gris) y de los lados (color de cada banda) |
+| Cortes (asas sobre el espectro) | frecuencias entre bandas (por defecto 120 Hz, 1 kHz, 6 kHz); se ordenan solos |
+| Width por banda | escala de Ozone: -100 = mono · 0 = sin cambios · +100 = el doble de anchura |
+| Corr por banda | correlación de la banda con límites según su frecuencia: en graves el verde exige casi mono (0,9), en agudos admite mucha anchura (0,1); amarillo = al límite, rojo = problema |
+| Stereoize por banda + modo I / II | abre bandas mono sin cambiar la suma mono. I: retardo corto (Haas). II: decorrelado con pasa-todo (más suave, sin eco) |
+| Solo / Bypass por banda | escuchar solo esa banda / dejarla sin procesar |
+| Link | al mover un Width se mueven todos lo mismo |
+| Vectorscopio | Polar Sample, Polar Level o Lissajous |
 | Mono | escuchar la mezcla en mono para comprobar |
-| Todo a 100 % | deja todas las bandas sin cambios |
+| Reiniciar | todas las bandas sin cambios |
 
-Medidores: correlación por banda (barra de colores de cada banda: verde = compatible, rojo = fase opuesta),
-anchura medida (bloque translúcido), vectorscopio (mono = línea vertical) y correlación total.
+Los 16 primeros parámetros son los de la versión 1.0 en el mismo orden: los proyectos guardados siguen cargando.
 
-Uso típico en EDM: banda 1 (graves) a 0 % para un bajo mono y firme; bandas 3–4 a 120–150 % para abrir
-sintes y aire; Stereoize suave en medios si un sinte mono suena estrecho.
+Uso típico en EDM: banda 1 (graves) a -100 para un bajo mono y firme; bandas 3–4 a +20/+50 sin pasar a
+amarillo para abrir sintes y aire; Stereoize II suave en medios si un sinte mono suena estrecho.
 
 ## Pruebas
 - `tests_imager.cpp`: nivel plano con todo al 100 %, sin latencia, suma mono intacta con ajustes extremos,
