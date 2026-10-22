@@ -1,16 +1,16 @@
 // AIE Exciter — excitador armónico multibanda (4 bandas) estilo Ozone Exciter (VST 2.4, 32 y 64 bits).
 //
 // Cada banda satura su parte de la señal con uno de 7 perfiles (Tube, Tape, Retro, Warm, Triode, Dual Triode,
-// Warm Tape; curvas propias que buscan ese carácter, no copias de ningún producto) y la mezcla con la señal
-// limpia. Modos por banda: Estéreo (L y R), Mid o Side (solo el centro o solo los lados), Transient o Sustain
+// Warm Tape) y la mezcla con la señal limpia. Las curvas de los 6 primeros están medidas en Ozone 7 Exciter
+// (renders a Amount 5 y 15, ver herramientas/medicion_ozone/generar_curvas.py): cada perfil es una curva fija
+// seguida de un paso alto (15-50 Hz), y Amount (0-15, la misma escala) empuja la señal contra la curva y
+// reescala la salida. Warm Tape (que Ozone 7 no tiene) es Warm seguido de Tape. Modos por banda: Estéreo (L y R), Mid o Side (solo el centro o solo los lados), Transient o Sustain
 // (solo los ataques o solo el cuerpo, con un detector de envolventes rápida/lenta).
 // La saturación se hace con sobremuestreo x1/x2/x4/x8 (etapas de media banda de fase lineal) y la señal limpia
 // se retrasa lo mismo: latencia fija de 69 muestras con cualquier factor.
-// Generador de armónicos independiente del nivel: antes de saturar, cada componente se divide por su envolvente
-// (queda entre -1 y 1), se satura siempre con la misma intensidad y se vuelve a multiplicar por la envolvente.
-// Así un pasaje flojo y uno fuerte reciben la misma proporción de armónicos y el volumen no cambia.
+// Como en Ozone, la saturación depende del nivel: un pasaje fuerte satura más que uno flojo.
 //
-// Por banda: Amount (cantidad de armónicos; 0 = sin efecto), Mix (seco/húmedo), Perfil, Modo, Solo, Bypass.
+// Por banda: Amount (0-15; 0 = sin efecto), Mix (seco/húmedo), Perfil, Modo, Solo, Bypass.
 // Global: 3 cortes, Oversampling, Delta (escuchar solo lo añadido), Output.
 
 #include <algorithm>
@@ -25,6 +25,7 @@
 #include "../common/vst2.h"
 #include "../common/gui_canvas.h"
 #include "../common/oversampler.h"
+#include "ozone_curves.h"
 #if defined(_WIN32)
 #include "../common/vst_window_win32.h"
 #endif
@@ -53,25 +54,68 @@ static const double kFreqMin = 20.0, kFreqMax = 20000.0;
 inline double freqFromNorm(double v) { return kFreqMin * std::pow(kFreqMax / kFreqMin, v); }
 inline double normFromFreq(double f) { return std::log(f / kFreqMin) / std::log(kFreqMax / kFreqMin); }
 static const int kScopeLen = 8192;
-static const double kMaxDriveDb = 24.0;
+static const double kAmountMax = 15.0;  // misma escala que Ozone
 
-// ---- curvas de saturación (pendiente 1 en el origen) ----
-inline double triode(double u) { return u >= 0 ? std::tanh(u) : std::tanh(1.6 * u) / 1.6; }  // asimétrica: pares
-inline double shape(int prof, double u) {
-    switch (prof) {
-        case kTube: {  // polarizada: armónicos pares, cálida
-            const double b = 0.25, tb = std::tanh(b), s = 1 - tb * tb;
-            return (std::tanh(u + b) - tb) / s;
-        }
-        case kTape: return u / std::sqrt(1 + u * u);                                      // suave y simétrica
-        case kRetro: return u >= 0 ? 1 - std::exp(-u) : -(1 - std::exp(u));              // transistor: rodilla dura
-        case kWarm: { double t = std::tanh(u); return t + 0.15 * t * t; }                 // 2.º y 3.er armónico
-        case kTriode: return triode(u);
-        case kDualTriode: return -triode(-triode(u));                                     // dos etapas: más denso
-        case kWarmTape: { double t = std::tanh(u); double w = t + 0.12 * t * t; return w / std::sqrt(1 + w * w); }
-        default: return u;
-    }
+// ---- curvas de saturación medidas en Ozone 7 ----
+// Curva base T(u) en una rejilla no uniforme (más densa cerca de 0); fuera de ella sigue en línea recta.
+inline double gridU(double U, int i) {
+    double t = -1 + 2.0 * i / (ozc::kPts - 1);
+    return U * std::sinh(ozc::kAlpha * t) / std::sinh(ozc::kAlpha);
 }
+inline double tableAt(const float* t, double U, double u) {
+    const int n = ozc::kPts;
+    if (u >= U) return t[n - 1] + (u - U) * (t[n - 1] - t[n - 2]) / (U - gridU(U, n - 2));
+    if (u <= -U) return t[0] + (u + U) * (t[1] - t[0]) / (gridU(U, 1) + U);
+    static const double sa = std::sinh(ozc::kAlpha);
+    double pos = (std::asinh(u / U * sa) / ozc::kAlpha + 1) * 0.5 * (n - 1);
+    int i = std::min(n - 2, std::max(0, int(pos)));
+    double fr = pos - i;
+    return t[i] + (t[i + 1] - t[i]) * fr;
+}
+// Curva de un perfil a un Amount (0-15) ya resuelta: y = eval(x).
+//  - modelo de empuje (Tube, Tape, Retro, Warm, Dual Triode): y = k T(g x); entre Amount 5 y 15 la ganancia de
+//    entrada g sube R veces y la salida se escala por c15 (ambas en dB, en línea recta con Amount).
+//  - Triode cambia de forma con Amount: se mezclan sus curvas medidas a 5 y a 15.
+//  - por debajo de 5 se va pasando a la señal limpia (Amount 0 = exactamente limpia).
+struct CurveEval {
+    const ozc::Curve* c = nullptr;
+    double g = 1, k = 1, w15 = 0, wDry = 0;
+    void set(int prof, double a) {
+        c = &ozc::kCurves[prof];
+        double s = (a - 5) / 10;
+        g = std::pow(c->R, s);
+        k = 1;
+        w15 = 0;
+        wDry = 0;
+        if (a >= 5) {
+            if (c->t15) { g = 1; w15 = std::min(1.0, s); }
+            else k = std::pow(c->c15, s);
+        } else {
+            k = 1 / g;  // ganancia en señal pequeña ~ la de Amount 5
+            wDry = 1 - a / 5;
+        }
+    }
+    inline double operator()(double x) const {
+        double y = k * tableAt(c->t5, c->U, g * x);
+        if (w15 > 0) y = (1 - w15) * y + w15 * tableAt(c->t15, c->U, x);
+        return wDry > 0 ? (1 - wDry) * y + wDry * x : y;
+    }
+};
+// curva completa de un perfil (Warm Tape = Warm con la mitad de Amount, nivelado, y luego Tape)
+struct ProfileCurve {
+    CurveEval a, b;
+    double norm = 1;
+    bool chain = false;
+    void set(int prof, double amount) {
+        chain = prof == kWarmTape;
+        if (chain) {
+            a.set(kWarm, amount * 0.6);
+            norm = 2e-4 / (a(1e-4) - a(-1e-4));
+            b.set(kTape, amount);
+        } else a.set(prof, amount);
+    }
+    inline double operator()(double x) const { return chain ? b(norm * a(x)) : a(x); }
+};
 
 struct Biquad {
     double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
@@ -120,48 +164,44 @@ struct Splitter {
     void clear() { lo2.clear(); hi2.clear(); lo1.clear(); hi1.clear(); lo3.clear(); hi3.clear(); ap3.clear(); ap1.clear(); }
 };
 
-// Saturación de una componente normalizada (entre -1 y 1): f(g·u) escalada para que un seno de amplitud 1
-// conserve su energía (RMS) aunque la saturación lo acerque a una onda cuadrada. La curva se guarda en una
-// tabla de 4096 puntos con interpolación lineal (error < -90 dB) para no calcular tanh/exp en cada muestra.
-inline double saturatorGain(int prof, double g) {
-    const double pi = 3.14159265358979323846;
-    double mean = 0, sq = 0, v[64];
-    for (int i = 0; i < 64; ++i) { v[i] = shape(prof, g * std::sin(2 * pi * (i + 0.5) / 64)); mean += v[i]; }
-    mean /= 64;
-    for (int i = 0; i < 64; ++i) sq += (v[i] - mean) * (v[i] - mean);
-    double r = std::sqrt(sq / 64);
-    return r > 1e-12 ? (1.0 / std::sqrt(2.0)) / r : 1.0;
-}
+// La curva se guarda en una tabla de 8192 puntos entre -1,5 y 1,5 (+3,5 dBFS) con interpolación lineal; solo se
+// recalcula cuando cambian el perfil o el Amount.
 struct Saturator {
-    static const int kTable = 4096;
-    static constexpr double kRange = 1.5;  // la entrada normalizada puede pasar un poco de 1 al sobremuestrear
+    static const int kTable = 8192;
+    static constexpr double kRange = 1.5;
     int prof = -1;
-    double g = -1, k = 1;
+    double amount = -1;
+    double kEdge[2] = {0, 0};  // pendiente fuera de la tabla
     float table[kTable + 2];
-    void set(int profile, double drive) {
-        if (profile == prof && drive == g) return;
+    void set(int profile, double a) {
+        if (profile == prof && a == amount) return;
         prof = profile;
-        g = drive;
-        k = saturatorGain(prof, g);
-        for (int i = 0; i <= kTable + 1; ++i) {
-            double u = -kRange + 2 * kRange * i / kTable;
-            table[i] = float(k * shape(prof, g * u));
-        }
+        amount = a;
+        ProfileCurve pc;
+        pc.set(prof, a);
+        for (int i = 0; i <= kTable + 1; ++i) table[i] = float(pc(-kRange + 2 * kRange * i / kTable));
+        kEdge[0] = (table[1] - table[0]) * (kTable / (2 * kRange));
+        kEdge[1] = (table[kTable] - table[kTable - 1]) * (kTable / (2 * kRange));
     }
     inline double operator()(double x) const {
         double pos = (x + kRange) * (kTable / (2 * kRange));
-        if (pos <= 0) return table[0];
-        if (pos >= kTable) return table[kTable];
+        if (pos <= 0) return table[0] + (x + kRange) * kEdge[0];
+        if (pos >= kTable) return table[kTable] + (x - kRange) * kEdge[1];
         int i = int(pos);
         double fr = pos - i;
         return table[i] + (table[i + 1] - table[i]) * fr;
     }
 };
 
-struct DcBlock {  // paso alto de 1 polo a ~10 Hz (las curvas asimétricas generan continua)
-    double x1 = 0, y1 = 0, r = 0.9986;
-    void set(double fs) { r = std::exp(-2 * 3.14159265358979323846 * 10.0 / fs); }
-    inline double run(double x) { double y = x - x1 + r * y1; x1 = x; y1 = y; return y; }
+struct DcBlock {  // paso alto de 1 polo después de la curva (como en Ozone: 15 Hz en Tube, ~50 Hz en Triode...)
+    double x1 = 0, y1 = 0, r = 0.9986, fs = 44100, fc = -1;
+    void set(double sampleRate, double hz) {
+        if (sampleRate == fs && hz == fc) return;
+        fs = sampleRate;
+        fc = hz;
+        r = std::exp(-2 * 3.14159265358979323846 * hz / fs);
+    }
+    inline double run(double x) { double y = (x - x1) * (1 + r) * 0.5 + r * y1; x1 = x; y1 = y; return y; }
     void clear() { x1 = y1 = 0; }
 };
 
@@ -172,14 +212,11 @@ struct BandState {
     Saturator sat;
     double envFast = 0, envSlow = 0, tw = 0;  // detector de transitorios
     double fade = 0;      // entrada suave del efecto al activar la banda (sin chasquidos)
-    double env[2] = {0, 0};
-    ovs::Delay envDelay[2];
     bool running = false;
     void clear() {
         for (int i = 0; i < 2; ++i) { os[i].clear(); dry[i].clear(); dc[i].clear(); }
         envFast = envSlow = tw = 0;
         fade = 0;
-        for (int i = 0; i < 2; ++i) { env[i] = 0; envDelay[i].clear(); }
         running = false;
     }
 };
@@ -193,7 +230,7 @@ public:
     double designed[kBands - 1] = {-1, -1, -1};
     Splitter splitL, splitR;
     BandState band[kBands];
-    double atkF = 0, relF = 0, atkS = 0, relS = 0, fadeCoef = 0.001, envRel = 0.999;
+    double atkF = 0, relF = 0, atkS = 0, relS = 0, fadeCoef = 0.001;
     // medidores y espectro para la interfaz
     std::atomic<float> mBand[kBands], mAdded[kBands];
     std::atomic<uint32_t> meterSeq;
@@ -231,7 +268,7 @@ public:
 #endif
         fx.object = this;
         fx.uniqueID = kUniqueId;
-        fx.version = 1000;
+        fx.version = 1100;
         fx.ioRatio = 1.0f;
         fx.initialDelay = ovs::kLatency;
         setSampleRate(44100);
@@ -249,8 +286,6 @@ public:
         atkF = 1 - std::exp(-1 / (0.0005 * sampleRate)); relF = 1 - std::exp(-1 / (0.030 * sampleRate));
         atkS = 1 - std::exp(-1 / (0.030 * sampleRate)); relS = 1 - std::exp(-1 / (0.250 * sampleRate));
         fadeCoef = 1 - std::exp(-1 / (0.020 * sampleRate));
-        envRel = std::exp(-1 / (0.040 * sampleRate));
-        for (auto& b : band) for (auto& d : b.dc) d.set(sampleRate);
         reset();
     }
     void reset() {
@@ -261,11 +296,12 @@ public:
     int profileOf(int b) const { int v = int(params[kProf1 + b] * (kNumProfiles - 1) + 0.5f); return std::min(kNumProfiles - 1, std::max(0, v)); }
     int modeOf(int b) const { int v = int(params[kMode1 + b] * (kNumModes - 1) + 0.5f); return std::min(kNumModes - 1, std::max(0, v)); }
     int osIdx() const { int v = int(params[kOversampling] * (kNumOs - 1) + 0.5f); return std::min(kNumOs - 1, std::max(0, v)); }
-    double driveOf(int b) const { return std::pow(10.0, params[kAmt1 + b] * kMaxDriveDb / 20.0); }
+    double amountOf(int b) const { return params[kAmt1 + b] * kAmountMax; }
     double outputDb() const { return -12.0 + 24.0 * params[kOutput]; }
     double curve(int b, double x) const {  // curva exacta (para la gráfica)
-        double g = driveOf(b);
-        return saturatorGain(profileOf(b), g) * shape(profileOf(b), g * x);
+        ProfileCurve pc;
+        pc.set(profileOf(b), amountOf(b));
+        return pc(x);
     }
 
     template <typename T>
@@ -279,13 +315,15 @@ public:
         }
         int stages = osIdx();
         bool anySolo = false;
-        double amtScale[kBands], mix[kBands];
+        double amt[kBands], mix[kBands];
         int mode[kBands];
         bool active[kBands], byp[kBands];
         for (int b = 0; b < kBands; ++b) {
             for (auto& o : band[b].os) o.setStages(stages);
-            band[b].sat.set(profileOf(b), driveOf(b));
-            amtScale[b] = params[kAmt1 + b];  // la intensidad sube con Amount (y la saturación también); 0 = limpia exacta
+            amt[b] = amountOf(b);
+            band[b].sat.set(profileOf(b), amt[b]);
+            double hp = ozc::kCurves[profileOf(b) == kWarmTape ? kTape : profileOf(b)].hp;
+            for (auto& d : band[b].dc) d.set(sampleRate, hp);
             mix[b] = params[kMix1 + b];
             mode[b] = modeOf(b);
             byp[b] = params[kByp1 + b] >= 0.5f;
@@ -293,7 +331,7 @@ public:
         }
         for (int b = 0; b < kBands; ++b) {
             active[b] = !anySolo || params[kSolo1 + b] >= 0.5f;
-            bool on = !byp[b] && amtScale[b] > 0;
+            bool on = !byp[b] && amt[b] > 0;
             if (on && !band[b].running) {  // se activa: filtros vacíos y entrada con fundido
                 for (int c = 0; c < 2; ++c) { band[b].os[c].clear(); band[b].dc[c].clear(); }
                 band[b].fade = 0;
@@ -326,16 +364,12 @@ public:
                 double y0 = d0, y1 = d1, e0 = 0, e1 = 0;
                 if (st.running) {
                     st.fade += fadeCoef * (1.0 - st.fade);
-                    double gain = amtScale[b] * mix[b] * weight * st.fade;
+                    double gain = mix[b] * weight * st.fade;
                     bool p0 = mode[b] != kSide, p1 = mode[b] != kMid;
                     double cc[2] = {c0, c1}, dd[2] = {d0, d1}, ee[2] = {0, 0};
                     for (int c = 0; c < 2; ++c) {
                         if (c == 0 ? !p0 : !p1) continue;
-                        // envolvente de pico (ataque inmediato, caída ~40 ms) para normalizar
-                        st.env[c] = std::max(std::fabs(cc[c]), st.env[c] * envRel);
-                        double en = std::max(st.env[c], 1e-6);
-                        double wn = st.os[c].process(cc[c] / en, st.sat);
-                        double w = st.dc[c].run(wn * st.envDelay[c].process(en, ovs::kLatency));
+                        double w = st.dc[c].run(st.os[c].process(cc[c], st.sat));
                         ee[c] = (w - dd[c]) * gain;
                     }
                     e0 = ee[0]; e1 = ee[1];
@@ -384,7 +418,8 @@ public:
             double v = f[i - kX1];
             if (v >= 1000) std::snprintf(b, sizeof b, "%.1f kHz", v / 1000);
             else std::snprintf(b, sizeof b, "%.0f Hz", v);
-        } else if (i < kProf1) std::snprintf(b, sizeof b, "%.0f %%", params[i] * 100.0);
+        } else if (i < kMix1) std::snprintf(b, sizeof b, "%.1f", params[i] * kAmountMax);
+        else if (i < kProf1) std::snprintf(b, sizeof b, "%.0f %%", params[i] * 100.0);
         else if (i < kMode1) return kProfileNames[profileOf(i - kProf1)];
         else if (i < kSolo1) return kModeNames[modeOf(i - kMode1)];
         else if (i == kOversampling) std::snprintf(b, sizeof b, "x%d", 1 << osIdx());
@@ -449,7 +484,7 @@ public:
     Rect outTrack = {680, 440, 200, 22};
     int selected = 1;  // banda que se ve en la gráfica de la curva
     int curveKey[2] = {-1, -1};
-    double curveAmt = -1;
+    double curveAmt = -1, curveMix = -1;
     std::vector<double> curveXs, curveYs;
 
     float bandLvl[kBands] = {0, 0, 0, 0}, addLvl[kBands] = {0, 0, 0, 0};
@@ -669,16 +704,23 @@ public:
             cv.fill({g.x + 8, int(Y(v)), g.w - 16, 1}, rgb(34, 32, 42));
         }
         cv.line(X(-1), Y(-1), X(1), Y(1), 1.0, rgb(70, 66, 82));
-        // la curva solo se recalcula si cambia la banda, el perfil o el Amount
+        // la curva solo se recalcula si cambia la banda, el perfil, el Amount o el Mix
         double amt = p->params[kAmt1 + selected];
-        if (curveKey[0] != selected || curveKey[1] != p->profileOf(selected) || curveAmt != amt) {
-            curveKey[0] = selected; curveKey[1] = p->profileOf(selected); curveAmt = amt;
+        double cmix = p->params[kMix1 + selected];
+        if (curveKey[0] != selected || curveKey[1] != p->profileOf(selected) || curveAmt != amt || curveMix != cmix) {
+            curveKey[0] = selected; curveKey[1] = p->profileOf(selected); curveAmt = amt; curveMix = cmix;
             curveXs.clear(); curveYs.clear();
+            ProfileCurve pc;
+            pc.set(p->profileOf(selected), amt * kAmountMax);
+            double mx = p->params[kMix1 + selected], ys[161], peak = 1e-9;
             for (int i = 0; i <= 160; ++i) {
                 double x = -1 + 2.0 * i / 160;
-                double y = x + (p->curve(selected, x) - x) * amt;
-                curveXs.push_back(X(x));
-                curveYs.push_back(Y(std::max(-1.2, std::min(1.2, y))));
+                ys[i] = x + (pc(x) - x) * mx;
+                peak = std::max(peak, std::fabs(ys[i]));
+            }
+            for (int i = 0; i <= 160; ++i) {  // normalizada: se ve la forma aunque la salida baje mucho
+                curveXs.push_back(X(-1 + 2.0 * i / 160));
+                curveYs.push_back(Y(ys[i] / peak));
             }
         }
         cv.polyline(curveXs, curveYs, 2.2, kBandColors[selected]);

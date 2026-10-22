@@ -53,36 +53,87 @@ int main(int argc, char** argv) {
         std::snprintf(m, sizeof m, "Amount 0: nivel plano (desviación %.3f dB) y latencia declarada %d (pico en %d)", worst, p.fx.initialDelay, pk);
         CHECK(worst < 0.05 && p.fx.initialDelay == 69 && pk >= 69 && pk < 75, m);
     }
-    {   // 2) perfiles: carácter de armónicos (pares / impares) en un seno de 300 Hz (banda 2)
-        const char* names[kNumProfiles] = {"Tube", "Tape", "Retro", "Warm", "Triode", "Dual Triode", "Warm Tape"};
-        double h2r[kNumProfiles], h3r[kNumProfiles];
-        for (int pr = 0; pr < kNumProfiles; ++pr) {
+    {   // 2) comparación con Ozone 7 Exciter: ganancia, H2 y H3 de un seno de 1 kHz (banda 2 entre 200 Hz y 5 kHz)
+        struct Ref { int prof; int amount; double level, gain, h2, h3; };
+        static const Ref refs[] = {  // medidas de los renders de Ozone 7 (herramientas/medicion_ozone)
+            {kTube, 5, -24, 1.14, -42.5, -33.6},
+            {kTube, 5, -12, 0.08, -31.6, -38.4},
+            {kTube, 5, -6, -0.17, -28.1, -32.3},
+            {kTube, 15, -24, 6.88, -48.2, -9.8},
+            {kTube, 15, -12, -5.03, -64.5, -9.6},
+            {kTube, 15, -6, -11.01, -64.8, -9.6},
+            {kTape, 5, -24, 2.97, -156.3, -53.3},
+            {kTape, 5, -12, 1.18, -167.9, -28.3},
+            {kTape, 5, -6, -3.58, -150.3, -17.9},
+            {kTape, 15, -24, 8.62, -147.0, -15.8},
+            {kTape, 15, -12, -3.19, -149.8, -14.2},
+            {kTape, 15, -6, -9.14, -148.9, -13.9},
+            {kRetro, 5, -24, 2.73, -158.7, -26.1},
+            {kRetro, 5, -12, -1.71, -165.7, -17.6},
+            {kRetro, 5, -6, -5.37, -161.5, -14.7},
+            {kRetro, 15, -24, 7.29, -157.7, -18.8},
+            {kRetro, 15, -12, -0.28, -170.1, -13.3},
+            {kRetro, 15, -6, -5.21, -167.5, -11.7},
+            {kWarm, 5, -24, 0.02, -33.4, -157.2},
+            {kWarm, 5, -12, 0.02, -26.2, -168.8},
+            {kWarm, 5, -6, 0.02, -22.6, -168.9},
+            {kWarm, 15, -24, -0.96, -19.4, -163.0},
+            {kWarm, 15, -12, -0.96, -12.2, -167.1},
+            {kWarm, 15, -6, -0.96, -8.6, -177.3},
+            {kTriode, 5, -24, 2.09, -33.0, -42.6},
+            {kTriode, 5, -12, 2.23, -30.6, -75.8},
+            {kTriode, 5, -6, 1.98, -23.6, -43.2},
+            {kTriode, 15, -24, 8.58, -24.8, -44.6},
+            {kTriode, 15, -12, 2.47, -10.2, -23.0},
+            {kTriode, 15, -6, -3.63, -6.1, -28.1},
+            {kDualTriode, 5, -24, 0.36, -65.0, -128.9},
+            {kDualTriode, 5, -12, 0.54, -37.0, -38.4},
+            {kDualTriode, 5, -6, 0.42, -21.7, -38.3},
+            {kDualTriode, 15, -24, 8.69, -13.2, -23.2},
+            {kDualTriode, 15, -12, -1.69, -11.5, -13.2},
+            {kDualTriode, 15, -6, -7.65, -12.0, -12.3},
+        };
+        const int i0 = 8000, i1 = 8000 + 441 * 80;  // número entero de ciclos de 1 kHz
+        double worstG = 0, worstH = 0;
+        int cases = 0, bad = 0;
+        for (const Ref& r : refs) {
             AIEExciter p(hostCb);
             p.setSampleRate(FS);
-            p.params[kAmt1 + 1] = 0.6f;
-            p.params[kProf1 + 1] = float(pr) / (kNumProfiles - 1);
-            std::vector<float> s = sine(300, 0.3, n);
+            p.params[kX1] = float(normFromFreq(200)); p.params[kX2] = float(normFromFreq(5000)); p.params[kX3] = float(normFromFreq(12000));
+            p.params[kAmt1 + 1] = float(r.amount / 15.0);
+            p.params[kProf1 + 1] = float(r.prof) / (kNumProfiles - 1);
+            p.params[kOversampling] = 1.0f;
+            double a = std::pow(10.0, r.level / 20);
+            std::vector<float> s = sine(1000, a, i1);
             process(p, s, s, oL, oR);
-            double h1 = tone(oL, 300, 8000, n), h2 = tone(oL, 600, 8000, n), h3 = tone(oL, 900, 8000, n);
-            h2r[pr] = 20 * std::log10(h2 / h1 + 1e-12);
-            h3r[pr] = 20 * std::log10(h3 / h1 + 1e-12);
-            std::printf("   %-11s  H2 %6.1f dB  H3 %6.1f dB\n", names[pr], h2r[pr], h3r[pr]);
+            double h1 = tone(oL, 1000, i0, i1), g = 20 * std::log10(h1 / a);
+            double h2 = 20 * std::log10(tone(oL, 2000, i0, i1) / h1 + 1e-12), h3 = 20 * std::log10(tone(oL, 3000, i0, i1) / h1 + 1e-12);
+            // un armónico que en Ozone no existe (< -50 dB) solo cuenta si aquí pasa de -45 dB
+            double eg = std::fabs(g - r.gain);
+            double e2 = r.h2 > -50 ? std::fabs(h2 - r.h2) : std::max(0.0, h2 + 45);
+            double e3 = r.h3 > -50 ? std::fabs(h3 - r.h3) : std::max(0.0, h3 + 45);
+            bool ok = eg < 2.5 && e2 < 4 && e3 < 4;
+            worstG = std::max(worstG, eg);
+            worstH = std::max(worstH, std::max(e2, e3));
+            bad += !ok;
+            ++cases;
+            std::printf("   %-11s %2d %5.0f dBFS  ganancia %+6.2f/%+6.2f  H2 %6.1f/%6.1f  H3 %6.1f/%6.1f%s\n", kProfileNames[r.prof], r.amount,
+                        r.level, g, r.gain, h2, r.h2, h3, r.h3, ok ? "" : "  <-");
         }
-        CHECK(h2r[kTube] > -40 && h2r[kTriode] > -40 && h2r[kWarm] > -40, "Tube, Triode y Warm generan armónicos pares (H2 > -40 dB; los simétricos quedan en -62)");
-        // (el residuo de H2 a ~-60 dB es la fuga de la propia medida, ventana rectangular)
-        CHECK(h2r[kTape] < -55 && h2r[kRetro] < -55 && h3r[kTape] > -45 && h3r[kRetro] > -45, "Tape y Retro: simétricos (H2 en el ruido de la medida), con H3");
-        CHECK(h3r[kDualTriode] > h3r[kTriode], "Dual Triode más denso en impares que Triode");
+        std::snprintf(m, sizeof m, "parecido a Ozone (mío/Ozone) en %d de %d casos; peor: ganancia %.1f dB, armónicos %.1f dB", cases - bad, cases, worstG, worstH);
+        CHECK(bad <= 4, m);
     }
-    {   // 3) más Amount = más armónicos; Mix 0 = sin cambios
+    {   // 3) más Amount = más armónicos (Retro, respecto al fundamental); Mix 0 = sin cambios
         double prev = -200;
         bool mono = true;
         for (float a : {0.2f, 0.5f, 0.9f}) {
             AIEExciter p(hostCb);
             p.setSampleRate(FS);
             p.params[kAmt1 + 1] = a;
-            std::vector<float> s = sine(300, 0.3, n);
+            p.params[kProf1 + 1] = float(kRetro) / (kNumProfiles - 1);
+            std::vector<float> s = sine(300, 0.1, n);
             process(p, s, s, oL, oR);
-            double h3 = 20 * std::log10(tone(oL, 900, 8000, n) + 1e-12);
+            double h3 = 20 * std::log10(tone(oL, 900, 8000, n) / tone(oL, 300, 8000, n) + 1e-12);
             mono = mono && h3 > prev;
             prev = h3;
         }
@@ -122,15 +173,15 @@ int main(int argc, char** argv) {
         std::vector<float> s = sine(300, 0.3, n), ns(n), rL, rR;
         for (int i = 0; i < n; ++i) ns[i] = -s[i];
         process(pm, s, ns, oL, oR);  // solo lados
-        double hm = tone(oL, 900, 8000, n);
+        double hm = tone(oL, 600, 8000, 8000 + 147 * 240);  // banda 2 = Warm: armónico 2 (ciclos enteros)
         process(ps, s, s, oL, oR);   // solo centro
-        double hs = tone(oL, 900, 8000, n);
+        double hs = tone(oL, 600, 8000, 8000 + 147 * 240);
         AIEExciter pm2(hostCb);
         pm2.setSampleRate(FS);
         pm2.params[kAmt1 + 1] = 0.9f; pm2.params[kMode1 + 1] = float(kMid) / (kNumModes - 1);
         process(pm2, s, s, oL, oR);  // centro con modo Mid: sí añade
-        double hm2 = tone(oL, 900, 8000, n);
-        std::snprintf(m, sizeof m, "modo Mid ignora los lados (H3 %.1e) y modo Side ignora el centro (H3 %.1e); Mid en el centro sí (%.1e)", hm, hs, hm2);
+        double hm2 = tone(oL, 600, 8000, 8000 + 147 * 240);
+        std::snprintf(m, sizeof m, "modo Mid ignora los lados (H2 %.1e) y modo Side ignora el centro (H2 %.1e); Mid en el centro sí (%.1e)", hm, hs, hm2);
         CHECK(hm < 1e-4 && hs < 1e-4 && hm2 > 1e-3, m);  // 1e-4 = -70 dB respecto al seno
     }
     {   // 6) Transient / Sustain: ráfagas cortas vs seno continuo
@@ -172,46 +223,21 @@ int main(int argc, char** argv) {
         std::snprintf(m, sizeof m, "sobremuestreo x8 reduce el aliasing: x1 %.1f dB -> x8 %.1f dB", ali[0], ali[1]);
         CHECK(ali[1] < ali[0] - 15, m);
     }
-    {   // 8) nivel estable a -12 dBFS con Amount 100 % y sin valores raros
+    {   // 8) sin valores raros con Amount 15 en los 7 perfiles, también con picos por encima de 0 dBFS
         bool finite = true;
-        double worst = 0;
-        for (int pr = 0; pr < kNumProfiles; ++pr) {
-            AIEExciter p(hostCb);
-            p.setSampleRate(FS);
-            for (int b = 0; b < kBands; ++b) { p.params[kAmt1 + b] = 1.0f; p.params[kProf1 + b] = float(pr) / (kNumProfiles - 1); }
-            std::vector<float> s = sine(300, 0.25, n);
-            process(p, s, s, oL, oR);
-            for (float v : oL) finite = finite && std::isfinite(v);
-            worst = std::max(worst, std::fabs(20 * std::log10(rms(oL, 8000, n) / rms(s, 8000, n))));
-        }
-        std::snprintf(m, sizeof m, "Amount 100 %% a -12 dBFS en los 7 perfiles: nivel ±%.1f dB, sin valores raros", worst);
-        CHECK(finite && worst < 1.5, m);
-        // el volumen no depende del nivel de entrada: igual a -36, -12 y -3 dBFS
-        double w2 = 0;
+        double peak = 0;
         for (int pr = 0; pr < kNumProfiles; ++pr)
-            for (double a : {0.0158, 0.25, 0.7}) {
-                AIEExciter q(hostCb);
-                q.setSampleRate(FS);
-                q.params[kAmt1 + 1] = 1.0f;
-                q.params[kProf1 + 1] = float(pr) / (kNumProfiles - 1);
-                std::vector<float> s = sine(300, a, n);
-                process(q, s, s, oL, oR);
-                w2 = std::max(w2, std::fabs(20 * std::log10(rms(oL, 8000, n) / rms(s, 8000, n))));
+            for (double a : {0.0158, 0.5, 1.4}) {
+                AIEExciter p(hostCb);
+                p.setSampleRate(FS);
+                for (int b = 0; b < kBands; ++b) { p.params[kAmt1 + b] = 1.0f; p.params[kProf1 + b] = float(pr) / (kNumProfiles - 1); }
+                std::vector<float> s(n);
+                for (int i = 0; i < n; ++i) s[i] = float(a * (0.6 * std::sin(2 * PI * 80 * i / FS) + 0.4 * std::sin(2 * PI * 3100 * i / FS)));
+                process(p, s, s, oL, oR);
+                for (float v : oL) { finite = finite && std::isfinite(v); peak = std::max(peak, double(std::fabs(v))); }
             }
-        std::snprintf(m, sizeof m, "Amount 100 %%: el volumen no cambia ni en pasajes flojos ni fuertes (-36/-12/-3 dBFS, ±%.1f dB)", w2);
-        CHECK(w2 < 1.5, m);
-        // misma proporción de armónicos a -36 y a -6 dBFS
-        double hr[2];
-        for (int k = 0; k < 2; ++k) {
-            AIEExciter q(hostCb);
-            q.setSampleRate(FS);
-            q.params[kAmt1 + 1] = 0.6f;
-            std::vector<float> s = sine(300, k ? 0.5 : 0.0158, n);
-            process(q, s, s, oL, oR);
-            hr[k] = 20 * std::log10(tone(oL, 900, 8000, n) / tone(oL, 300, 8000, n));
-        }
-        std::snprintf(m, sizeof m, "armónicos independientes del nivel: H3 %.1f dB a -36 dBFS y %.1f dB a -6 dBFS", hr[0], hr[1]);
-        CHECK(std::fabs(hr[0] - hr[1]) < 2, m);
+        std::snprintf(m, sizeof m, "Amount 15 en los 7 perfiles (-36 a +3 dBFS): sin valores raros, pico de salida %.2f", peak);
+        CHECK(finite && peak < 8, m);
     }
     // 9) interfaz
     AIEExciter p(hostCb);
