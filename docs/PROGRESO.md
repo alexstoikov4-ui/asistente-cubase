@@ -200,3 +200,14 @@ EQ de canal de Cubase (modo EQ de Mackie) y parámetros de plugins (modo PLUG-IN
 - Señal de medición para Ozone con cada medida triplicada (la demo de Ozone 7 del usuario mete silencios) y
   analizador `herramientas/medicion_ozone/analizar.py`, verificado con una simulación (latencia, silencios y
   armónicos teóricos correctos).
+
+### AIE Exciter 1.1: sonido de Ozone 7 Exciter
+- El usuario exportó la señal de medición por Ozone 7 (demo) con cada perfil a Amount 5 y 15 (escala 0-15).
+- Hallazgo: Tube, Retro y Warm de Ozone son una curva fija + paso alto de 15 Hz (al deshacer el filtro, la
+  curva subida y bajada coincide al 0,4 %). Amount es ganancia de entrada contra la curva más un reescalado.
+  Se copian tal cual: ganancia y armónicos a menos de 0,1 dB y 1,5 dB de Ozone.
+- Tape, Triode y Dual Triode tienen memoria (histéresis, polarización dependiente del nivel). Un primer ajuste
+  libre clavaba los armónicos pero daba curvas en zigzag (crujirían con música); se rehízo con curvas suaves y
+  crecientes. Amount 5 casi exacto; Amount 15 con 3-4 dB menos de ganancia en pasajes flojos (Triode, Dual).
+- Se abandona la normalización por envolvente de la 1.0: Ozone satura más lo fuerte que lo flojo.
+- Amount pasa a mostrarse de 0 a 15 como en Ozone. Pruebas: 33 de 36 casos dentro de 2,5 dB / 4 dB de Ozone.

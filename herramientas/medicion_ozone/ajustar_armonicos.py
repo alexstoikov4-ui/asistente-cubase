@@ -12,7 +12,7 @@ FS=44100; N=4410; t=np.arange(N)/FS
 LEVELS=[-24,-12,-6,-0.1]
 KN=np.array([0.02,0.04,0.063,0.1,0.16,0.25,0.35,0.5,0.7,1.0,1.3])
 KX=np.concatenate([-KN[::-1],[0],KN])
-LAMBDA=1.5  # suavidad: castiga los cambios bruscos de pendiente entre tramos
+LAMBDA=0.4  # suavidad: castiga los cambios bruscos de pendiente entre tramos
 def values(p):
     """p: log de la pendiente de cada tramo entre nudos -> curva creciente con y(0)=0"""
     s=np.exp(p); dx=np.diff(KX); inc=s*dx; m=len(KN)
