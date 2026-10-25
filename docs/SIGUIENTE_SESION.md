@@ -9,8 +9,12 @@ y que diga siempre lo que pudo comprobar y lo que no.
 - `AIEngineer.exe` arranca; componer MIDI funciona; «Abre el mezclador» funciona (atajo de teclado).
 - Mezclador por Mackie Control (`aiengineer/cubase/mackie.py`, `mixer_control.py`, `midi_ports.py`):
   **solo funcionan los botones Solo y Mute** (encienden y apagan). Volumen y paneo no hacen efecto visible.
-  Falta saber por qué: puerto MIDI de vuelta, toque del fader (nota 0x68+tira), formato de la pantalla
-  Mackie de Cubase 5 (si muestra dB), o el banco/tira elegida.
+  Al conectar, la app responde «Cubase no responde... revisa Mackie Control» aunque el usuario lo tiene
+  añadido en Cubase: **no llega nada de Cubase a la app** (camino de vuelta, puerto 'Cubase a AIE').
+  Solo/Mute funcionan porque solo van de la app a Cubase; subir/bajar volumen necesita leer antes el valor
+  actual (`change_volume`) y, sin vuelta, termina en "failed" sin mover el fader.
+  Pendiente: resultado del botón «Diagnóstico MIDI» (prueba de bucle del puerto + escucha a Cubase) y
+  captura de la configuración de Mackie Control y de los puertos MIDI en Cubase.
 - Agente de pantalla con Ollama (`aiengineer/screen/`): instalado pero sin probar a fondo.
 
 ## Primer paso propuesto
