@@ -99,6 +99,7 @@ class MackieSurface:
         if touch:
             self.note(0x68 + strip, True)
         self.out.send(bytes([0xE0 | strip, value & 0x7F, (value >> 7) & 0x7F]))
+        self.state.faders[strip] = value  # como un fader motorizado: queda donde lo dejamos
 
     def release_fader(self, strip: int):
         self.note(0x68 + strip, False)
@@ -170,6 +171,13 @@ class MackieSurface:
         """Saludo de la superficie: algunos hosts ignoran a una superficie que no se ha presentado."""
         self.out.send(HEADER + bytes([0x01]) + SERIAL + bytes([0, 0, 0, 0, 0xF7]))
         self.out.send(HEADER + bytes([0x03]) + SERIAL + bytes([0xF7]))
+
+    def refresh_faders(self):
+        """Pide a Cubase la posición de los faders: FLIP dos veces (cambia faders y V-pots y vuelve), lo que
+        obliga a Cubase a reenviar la posición de cada fader aunque no envíe el texto de la pantalla."""
+        for _ in range(2):
+            self.press(NAV["flip"])
+            self.poll(0.25)
 
     def wake(self, attempts: int = 3) -> bool:
         """Se presenta a Cubase, le pide que refresque la superficie y comprueba que responde."""

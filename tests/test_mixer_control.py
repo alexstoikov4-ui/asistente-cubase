@@ -106,3 +106,17 @@ def test_pan_without_display_uses_ring_leds(tmp_path):
     assert r.status == "unverified" and 20 <= cub.tracks[3].pan <= 40
     r = m.set_pan(4, 0)
     assert r.status == "verified" and cub.tracks[3].pan == 0
+
+
+def test_change_volume_asks_cubase_for_fader_when_no_text(tmp_path):
+    # Como el Cubase del usuario: no envía texto de pantalla ni posiciones por iniciativa propia.
+    cub = FakeCubase(NAMES, send_lcd=False)
+    m = MixerControl(MackieSurface(cub, cub.to_surface), tmp_path / "curve.json", settle=0)
+    cub.tracks[1].db = -10.0
+    r = m.change_volume(2, 3.0)  # sin posición conocida: FLIP dos veces para que Cubase la reenvíe
+    assert r.status == "unverified" and "movido" in r.message
+    assert -10.0 < cub.tracks[1].db < -4.0  # ha subido (la curva de la app es solo aproximada)
+    assert not cub.flipped
+    # la siguiente orden relativa parte de donde la dejó la app
+    before = cub.tracks[1].db
+    assert m.change_volume(2, -3.0).status == "unverified" and cub.tracks[1].db < before

@@ -25,9 +25,18 @@ def fake_taper(pos: int) -> float:
     return round(6.0 + 40.0 * math.log10(pos / 16383), 2)
 
 
+def fake_position(db: float) -> int:
+    """Inversa de fake_taper: posición de fader para un valor en dB."""
+    if not math.isfinite(db):
+        return 0
+    return max(0, min(16383, int(round(16383 * 10 ** ((db - 6.0) / 40.0)))))
+
+
 class FakeCubase:
-    def __init__(self, names: list[str], show_values: bool = True, send_rings: bool = True):
+    def __init__(self, names: list[str], show_values: bool = True, send_rings: bool = True, send_lcd: bool = True):
         self.send_rings = send_rings
+        self.send_lcd = send_lcd  # False: como el Cubase del usuario, que no envía el texto de pantalla
+        self.flipped = False
         self.tracks = [FakeTrack(n) for n in names]
         self.to_surface = LoopbackPair()  # lo que la superficie recibe
         self.show_values = show_values
@@ -56,6 +65,10 @@ class FakeCubase:
             elif n == NAV["bank_left"] and self.bank > 0:
                 self.bank -= 1
                 self._refresh()
+            elif n == NAV["flip"]:
+                self.flipped = not self.flipped
+                if not self.flipped:
+                    self._send_faders()
             elif n in (ASSIGN["pan"], ASSIGN["track"]):
                 self.mode = "pan"
                 self._refresh()
@@ -105,7 +118,16 @@ class FakeCubase:
     def _pan_text(p):
         return "C" if p == 0 else (f"L{int(-p)}" if p < 0 else f"R{int(p)}")
 
+    def _send_faders(self):
+        for s in range(8):
+            t = self._track(s)
+            if t:
+                pos = fake_position(t.db)
+                self.to_surface.send(bytes([0xE0 | s, pos & 0x7F, pos >> 7]))
+
     def _lcd_strip(self, strip, row, text):
+        if not self.send_lcd:
+            return
         pos = row * 56 + strip * 7
         self.to_surface.send(HEADER + bytes([0x12, pos]) + text[:7].ljust(7).encode("ascii") + bytes([0xF7]))
 

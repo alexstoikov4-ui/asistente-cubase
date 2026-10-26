@@ -97,6 +97,8 @@ class MixerControl:
     def go_to_track(self, track: int) -> int:
         """Selecciona el banco que contiene la pista (1-based) y devuelve la tira 0-7."""
         target_bank = (track - 1) // 8
+        if self.bank != target_bank:
+            self.s.state.faders.clear()  # las posiciones guardadas eran de otro banco
         while self.bank < target_bank:
             self.s.press(NAV["bank_right"])
             self.bank += 1
@@ -176,6 +178,9 @@ class MixerControl:
             return self.set_volume(track, cur + delta_db)
         # Sin texto en pantalla: se usa la posición del fader que Cubase devuelve a la superficie
         pos = self.s.state.faders.get(strip)
+        if pos is None:
+            self.s.refresh_faders()
+            pos = self.s.state.faders.get(strip)
         if pos is None:
             self.s.wake(attempts=1)
             pos = self.s.state.faders.get(strip)

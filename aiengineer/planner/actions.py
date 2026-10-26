@@ -403,7 +403,7 @@ def mixer_control(engine, params) -> dict:
     if track is None:
         names = m.track_names()
         return result("failed", f"No encuentro una pista llamada '{cmd.target}'. Pistas en Cubase: "
-                                + (", ".join(names) if names else "(no se leen nombres: ¿está activo Mackie Control?)"))
+                                + (", ".join(names) if names else "(Cubase no envía los nombres de las pistas a la superficie Mackie; usa el número de pista, por ejemplo «sube la pista 2 3 dB»)"))
     if cmd.action == "set_db":
         r = m.set_volume(track, cmd.value)
     elif cmd.action == "change_db":
