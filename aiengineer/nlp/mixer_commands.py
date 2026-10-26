@@ -25,6 +25,7 @@ def _target(t: str) -> str | None:
     if m:
         name = re.sub(r"\b(volumen|fader|nivel|paneo|pan|mute|solo)\b", "", m.group(1)).strip()
         name = re.sub(r"^(del|de la|de|el|la|los|las)\s+", "", name).strip()
+        name = re.sub(r"^(pista|canal|track)\s+(de\s+|del\s+)?", "", name).strip()  # «la pista bass 1» -> «bass 1»
         return name or None
     return None
 
