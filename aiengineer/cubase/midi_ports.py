@@ -203,17 +203,22 @@ def diagnose(out_name: str, in_name: str, listen_seconds: float = 6.0, say=None)
         try:
             loop_out = WinMidiOut(in_name)
             # solo SysEx de uso no comercial (0x7D): no suena aunque Cubase escuche ese puerto
-            loop_out.send(bytes([0xF0, 0x7D, 0x41, 0x49, 0x45, 0xF7]))
+            probe = bytes([0xF0, 0x7D, 0x41, 0x49, 0x45, 0xF7])
+            loop_out.send(probe)
             got, sysex = 0, False
             end = time.time() + 1.5
             while time.time() < end:
                 m = inp.receive(timeout=0.05)
                 if m:
-                    got += 1
-                    sysex = sysex or m[:1] == b"\xf0"
+                    got += 1  # aquí también cuentan los medidores que envíe Cubase a la vez
+                    sysex = sysex or m == probe
             loop_out.close()
-            if got:
-                lines.append(f"✔ Prueba de bucle: la aplicación recibe SysEx por '{inp.name}' ({got} mensajes).")
+            if sysex:
+                lines.append(f"✔ Prueba de bucle: la aplicación recibe SysEx por '{inp.name}'.")
+            elif got:
+                lines.append(f"✖ Prueba de bucle: llegan mensajes cortos por '{inp.name}' pero el SysEx de prueba no "
+                             "vuelve. El controlador MIDI de Windows no deja pasar SysEx, y Cubase envía por SysEx "
+                             "los nombres de pista y los valores en dB.")
             else:
                 lines.append(f"✖ Prueba de bucle: lo enviado a '{in_name}' no vuelve por su entrada. El puerto "
                              "virtual no funciona como bucle para esta aplicación.")
@@ -221,15 +226,24 @@ def diagnose(out_name: str, in_name: str, listen_seconds: float = 6.0, say=None)
             lines.append(f"• No se pudo hacer la prueba de bucle: {e}")
         # 2) escuchar a Cubase
         say(f"Escuchando a Cubase durante {listen_seconds:.0f} s: dale al PLAY o mueve un fader en Cubase…")
-        count, kinds = 0, set()
+        count, kinds = 0, {}
         end = time.time() + listen_seconds
         while time.time() < end:
             m = inp.receive(timeout=0.05)
             if m:
                 count += 1
-                kinds.add("SysEx" if m[0] == 0xF0 else {0x90: "notas/LED", 0xE0: "fader", 0xB0: "CC"}.get(m[0] & 0xF0, hex(m[0])))
+                k = "SysEx (pantalla)" if m[0] == 0xF0 else {0x90: "LED", 0xE0: "fader", 0xB0: "CC (V-pot/reloj)",
+                                                          0xD0: "medidores"}.get(m[0] & 0xF0, hex(m[0]))
+                kinds[k] = kinds.get(k, 0) + 1
         if count:
-            lines.append(f"✔ Cubase envía datos: {count} mensajes ({', '.join(sorted(kinds))}).")
+            lines.append(f"✔ Cubase envía datos: {count} mensajes (" +
+                         ", ".join(f"{k}: {v}" for k, v in sorted(kinds.items())) + ").")
+            if "fader" not in kinds:
+                lines.append("  • No llegó ninguna posición de fader: si moviste un fader en Cubase durante la escucha, "
+                             "Cubase no lo está enviando a la superficie.")
+            if "SysEx (pantalla)" not in kinds:
+                lines.append("  • No llegó texto de pantalla (SysEx). Prueba en Cubase: Dispositivos > Configuración "
+                             "de dispositivos > Mackie Control > Reinicializar, y repite el diagnóstico.")
         else:
             lines.append("✖ Cubase no ha enviado nada por ese puerto. Revisa en Cubase que Mackie Control tenga "
                          f"Salida MIDI = '{in_name}', reinicia Cubase y abre un proyecto.")
