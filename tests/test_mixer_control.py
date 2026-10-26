@@ -120,3 +120,15 @@ def test_change_volume_asks_cubase_for_fader_when_no_text(tmp_path):
     # la siguiente orden relativa parte de donde la dejó la app
     before = cub.tracks[1].db
     assert m.change_volume(2, -3.0).status == "unverified" and cub.tracks[1].db < before
+
+
+def test_stimulus_test_reports_what_cubase_answers():
+    from aiengineer.cubase.midi_ports import stimulus_test
+    with_lcd = "\n".join(stimulus_test(FakeCubase(NAMES).to_surface, FakeCubase(NAMES)))
+    cub = FakeCubase(NAMES)
+    lines = stimulus_test(cub.to_surface, cub)
+    assert any("botón PAN" in l and "SysEx" in l for l in lines)
+    assert any("FLIP x2" in l and "fader" in l for l in lines)
+    cub = FakeCubase(NAMES, send_lcd=False)
+    assert not any("SysEx" in l for l in stimulus_test(cub.to_surface, cub))
+    assert with_lcd  # el informe nunca sale vacío

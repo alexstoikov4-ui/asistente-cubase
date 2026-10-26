@@ -247,12 +247,67 @@ def diagnose(out_name: str, in_name: str, listen_seconds: float = 6.0, say=None)
         else:
             lines.append("✖ Cubase no ha enviado nada por ese puerto. Revisa en Cubase que Mackie Control tenga "
                          f"Salida MIDI = '{in_name}', reinicia Cubase y abre un proyecto.")
+        # 3) qué responde Cubase a cada estímulo de la superficie
+        try:
+            out = WinMidiOut(out_name)
+        except MidiUnavailable as e:
+            lines.append(f"✖ Salida: {e}")
+        else:
+            lines.append(f"✔ La salida '{out_name}' se puede abrir. Respuesta de Cubase a cada botón:")
+            try:
+                lines += stimulus_test(inp, out)
+            finally:
+                out.close()
     finally:
         inp.close()
-    try:
-        out = WinMidiOut(out_name)
-        out.close()
-        lines.append(f"✔ La salida '{out_name}' se puede abrir.")
-    except MidiUnavailable as e:
-        lines.append(f"✖ Salida: {e}")
+    return lines
+
+
+def _listen(inp, seconds: float) -> tuple[dict, list[str]]:
+    kinds: dict = {}
+    sysex: list[str] = []
+    end = time.time() + seconds
+    while time.time() < end:
+        m = inp.receive(timeout=0.02)
+        if not m:
+            continue
+        if m[0] == 0xF0:
+            k = "SysEx"
+            if len(sysex) < 2:
+                sysex.append(m[:20].hex(" "))
+        else:
+            k = {0x90: "LED", 0xE0: "fader", 0xB0: "CC", 0xD0: "medidores"}.get(m[0] & 0xF0, hex(m[0] & 0xF0))
+        kinds[k] = kinds.get(k, 0) + 1
+    return kinds, sysex
+
+
+def stimulus_test(inp, out) -> list[str]:
+    """Pulsa botones de la superficie (los que vuelven al estado inicial) y anota qué devuelve Cubase a cada uno:
+    sirve para saber si Cubase envía alguna vez texto de pantalla (SysEx) y en qué momento."""
+    from .mackie import ASSIGN, HEADER, NAV, SERIAL
+
+    def press(n):
+        out.send(bytes([0x90, n, 0x7F]))
+        time.sleep(0.03)
+        out.send(bytes([0x90, n, 0x00]))
+
+    steps = [
+        ("saludo de superficie", lambda: (out.send(HEADER + bytes([0x01]) + SERIAL + bytes([0, 0, 0, 0, 0xF7])),
+                                          out.send(HEADER + bytes([0x03]) + SERIAL + bytes([0xF7])))),
+        ("petición de versión", lambda: out.send(HEADER + bytes([0x13, 0x00, 0xF7]))),
+        ("botón PAN", lambda: press(ASSIGN["pan"])),
+        ("NAME/VALUE x2", lambda: (press(NAV["name_value"]), time.sleep(0.3), press(NAV["name_value"]))),
+        ("FLIP x2", lambda: (press(NAV["flip"]), time.sleep(0.3), press(NAV["flip"]))),
+        ("BANCO > y <", lambda: (press(NAV["bank_right"]), time.sleep(0.3), press(NAV["bank_left"]))),
+        ("CANAL > y <", lambda: (press(NAV["channel_right"]), time.sleep(0.3), press(NAV["channel_left"]))),
+        ("tocar fader 1", lambda: (out.send(bytes([0x90, 0x68, 0x7F])), time.sleep(0.3), out.send(bytes([0x90, 0x68, 0x00])))),
+    ]
+    lines = []
+    _listen(inp, 0.3)  # descarta lo pendiente
+    for name, act in steps:
+        act()
+        kinds, sysex = _listen(inp, 0.9)
+        kinds.pop("medidores", None)  # llegan siempre; no dicen nada del estímulo
+        desc = ", ".join(f"{k}: {v}" for k, v in sorted(kinds.items())) or "nada"
+        lines.append(f"   {name}: {desc}" + (f"  [{sysex[0]}]" if sysex else ""))
     return lines
